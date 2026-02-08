@@ -25,6 +25,44 @@ enemyYellow.src = "enemy-yellow.png";
 const enemyImages = [enemyBlue, enemyYellow];
 
 // =========================
+//  AUDIO
+// =========================
+const engineSound = new Audio("sounds/engine-loop.mp3");
+engineSound.loop = true;
+engineSound.volume = 1;
+
+const crashSound = new Audio("sounds/crash.mp3");
+crashSound.volume = 1;
+
+let isMuted = false;
+
+// =========================
+//  UI CONTROLS
+// =========================
+const muteBtn = document.getElementById("muteBtn");
+const volumeSlider = document.getElementById("volumeSlider");
+
+muteBtn.addEventListener("click", () => {
+  isMuted = !isMuted;
+
+  if (isMuted) {
+    engineSound.muted = true;
+    crashSound.muted = true;
+    muteBtn.textContent = "Unmute";
+  } else {
+    engineSound.muted = false;
+    crashSound.muted = false;
+    muteBtn.textContent = "Mute";
+  }
+});
+
+volumeSlider.addEventListener("input", () => {
+  const vol = volumeSlider.value;
+  engineSound.volume = vol;
+  crashSound.volume = vol;
+});
+
+// =========================
 //  PLAYER
 // =========================
 const player = {
@@ -96,6 +134,11 @@ function checkCollision(a, b) {
 function update() {
   if (gameOver) return;
 
+  // Start engine sound once
+  if (engineSound.paused && !isMuted) {
+    engineSound.play();
+  }
+
   // Player movement
   if (player.moveLeft) player.x -= player.speed;
   if (player.moveRight) player.x += player.speed;
@@ -124,6 +167,9 @@ function update() {
 
     // Collision
     if (checkCollision(player, car)) {
+      crashSound.play();
+      engineSound.pause();
+      engineSound.currentTime = 0;
       gameOver = true;
     }
   });
