@@ -4,6 +4,29 @@ body {
   background: #000;
 }
 
+#audioControls {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 10;
+  display: flex;
+  gap: 10px;
+}
+
+#muteBtn {
+  padding: 10px 20px;
+  background: #ff0066;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+#volumeSlider {
+  width: 120px;
+}
+
 #gameCanvas {
   display: block;
   width: 100vw;
