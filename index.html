@@ -1,153 +1,97 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Quiz Game</title>
-<style>
-    body {
-        margin: 0;
-        font-family: Arial, sans-serif;
-        background: linear-gradient(135deg, #1e3c72, #2a5298);
-        color: #fff;
-        text-align: center;
-    }
-    h1 {
-        margin-top: 40px;
-        font-size: 40px;
-        letter-spacing: 2px;
-    }
-    #game-container {
-        margin: 40px auto;
-        width: 80%;
-        max-width: 600px;
-        background: rgba(255,255,255,0.1);
-        padding: 20px;
-        border-radius: 15px;
-        backdrop-filter: blur(5px);
-    }
-    button {
-        padding: 12px 20px;
-        margin: 10px;
-        border: none;
-        border-radius: 10px;
-        background: #ffcc00;
-        color: #000;
-        font-size: 18px;
-        cursor: pointer;
-        transition: 0.2s;
-    }
-    button:hover {
-        background: #ffdd33;
-    }
-    .option {
-        display: block;
-        margin: 10px auto;
-        width: 80%;
-        background: #fff;
-        color: #000;
-    }
-</style>
+  <meta charset="UTF-8" />
+  <title>NikkoGames Quiz</title>
+  <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
+  <div id="app">
+    <header class="top-bar">
+      <h1>NikkoGames Quiz</h1>
+      <div class="score-info">
+        <span id="current-category-label">Select a category</span>
+        <span>Score: <strong id="score">0</strong></span>
+        <span>Best: <strong id="best-score">0</strong></span>
+      </div>
+    </header>
 
-<h1>Ultimate Quiz Game</h1>
+    <!-- Category selection screen -->
+    <main id="screen-categories" class="screen active">
+      <h2>Choose your category</h2>
+      <div class="category-grid">
+        <button class="category-card" data-category="astronomy">
+          <div class="icon">🌌</div>
+          <div class="label">Astronomy</div>
+        </button>
+        <button class="category-card" data-category="movies">
+          <div class="icon">🎬</div>
+          <div class="label">Movies</div>
+        </button>
+        <button class="category-card" data-category="history">
+          <div class="icon">📜</div>
+          <div class="label">History</div>
+        </button>
+        <button class="category-card" data-category="culture">
+          <div class="icon">🌍</div>
+          <div class="label">General Culture</div>
+        </button>
+        <button class="category-card" data-category="travel">
+          <div class="icon">✈️</div>
+          <div class="label">Travel</div>
+        </button>
+        <button class="category-card" data-category="sports">
+          <div class="icon">🏟️</div>
+          <div class="label">Sports</div>
+        </button>
+        <button class="category-card" data-category="technology">
+          <div class="icon">💻</div>
+          <div class="label">Technology</div>
+        </button>
+        <button class="category-card" data-category="food">
+          <div class="icon">🍽️</div>
+          <div class="label">Food</div>
+        </button>
+        <button class="category-card" data-category="comics">
+          <div class="icon">💥</div>
+          <div class="label">Comic Books</div>
+        </button>
+      </div>
+    </main>
 
-<div id="game-container">
-    <h2>Select a Category</h2>
-    <button onclick="startGame('astronomy')">Astronomy</button>
-    <button onclick="startGame('movies')">Movies</button>
-    <button onclick="startGame('history')">History</button>
-    <button onclick="startGame('culture')">General Culture</button>
-</div>
+    <!-- Quiz screen -->
+    <main id="screen-quiz" class="screen">
+      <div class="question-box animated">
+        <div class="question-header">
+          <span id="question-counter"></span>
+        </div>
+        <h2 id="question-text"></h2>
+        <div id="options-container" class="options"></div>
+      </div>
+      <button id="back-to-menu" class="secondary-btn">Back to menu</button>
+    </main>
 
-<script>
-const questions = {
-    astronomy: [
-        {q:"What is the largest planet in our solar system?", a:"Jupiter", o:["Mars","Earth","Jupiter","Saturn"]},
-        {q:"What galaxy do we live in?", a:"Milky Way", o:["Andromeda","Milky Way","Sombrero","Whirlpool"]},
-        {q:"What is the Sun mostly made of?", a:"Hydrogen", o:["Iron","Carbon","Hydrogen","Helium"]},
-        {q:"Which planet has the most moons?", a:"Saturn", o:["Earth","Mars","Jupiter","Saturn"]},
-        {q:"What is a light-year?", a:"Distance", o:["Time","Brightness","Distance","Speed"]},
-        {q:"Closest star to Earth?", a:"Proxima Centauri", o:["Sirius","Vega","Proxima Centauri","Betelgeuse"]},
-        {q:"What is the name of our moon?", a:"The Moon", o:["Luna","Selene","The Moon","Gaia"]},
-        {q:"Which planet is known as the Red Planet?", a:"Mars", o:["Venus","Mars","Mercury","Neptune"]},
-        {q:"What force keeps planets in orbit?", a:"Gravity", o:["Magnetism","Wind","Gravity","Pressure"]},
-        {q:"What type of galaxy is the Milky Way?", a:"Spiral", o:["Elliptical","Irregular","Spiral","Ring"]},
-    ],
-    movies: [
-        {q:"Who directed 'Inception'?", a:"Christopher Nolan", o:["Spielberg","Tarantino","Christopher Nolan","Ridley Scott"]},
-        {q:"Which movie features the character Jack Sparrow?", a:"Pirates of the Caribbean", o:["Titanic","Pirates of the Caribbean","Avatar","Gladiator"]},
-        {q:"What is the highest-grossing film of all time?", a:"Avatar", o:["Titanic","Avatar","Endgame","Star Wars"]},
-        {q:"Who played the Joker in 'The Dark Knight'?", a:"Heath Ledger", o:["Jared Leto","Heath Ledger","Phoenix","Bale"]},
-        {q:"Which movie has the quote 'I'll be back'?", a:"The Terminator", o:["Rocky","Predator","The Terminator","Rambo"]},
-        {q:"What is the name of the wizarding school in Harry Potter?", a:"Hogwarts", o:["Durmstrang","Beauxbatons","Hogwarts","Ilvermorny"]},
-        {q:"Which film won Best Picture in 1994?", a:"Forrest Gump", o:["Pulp Fiction","Forrest Gump","Shawshank","Lion King"]},
-        {q:"Who directed 'Pulp Fiction'?", a:"Quentin Tarantino", o:["Nolan","Tarantino","Scorsese","Cameron"]},
-        {q:"Which movie features a DeLorean time machine?", a:"Back to the Future", o:["Matrix","Back to the Future","Looper","Interstellar"]},
-        {q:"What is the name of Simba’s father?", a:"Mufasa", o:["Scar","Mufasa","Rafiki","Zazu"]},
-    ],
-    history: [
-        {q:"Who was the first President of the United States?", a:"George Washington", o:["Lincoln","Jefferson","George Washington","Adams"]},
-        {q:"In which year did WWII end?", a:"1945", o:["1939","1942","1945","1950"]},
-        {q:"Where were the pyramids built?", a:"Egypt", o:["Mexico","China","Egypt","India"]},
-        {q:"Who discovered America?", a:"Christopher Columbus", o:["Magellan","Columbus","Vespucci","Cook"]},
-        {q:"Which empire built the Colosseum?", a:"Roman Empire", o:["Greek","Roman Empire","Ottoman","Persian"]},
-        {q:"Who was known as the Maid of Orléans?", a:"Joan of Arc", o:["Cleopatra","Joan of Arc","Elizabeth I","Catherine"]},
-        {q:"What wall fell in 1989?", a:"Berlin Wall", o:["China Wall","Berlin Wall","Hadrian's Wall","Iron Curtain"]},
-        {q:"Who was the first man on the Moon?", a:"Neil Armstrong", o:["Aldrin","Gagarin","Neil Armstrong","Collins"]},
-        {q:"Which war was fought between North and South US states?", a:"Civil War", o:["WWI","Civil War","Revolutionary War","Vietnam"]},
-        {q:"Who was the king of Macedonia who created a vast empire?", a:"Alexander the Great", o:["Caesar","Napoleon","Alexander the Great","Hannibal"]},
-    ],
-    culture: [
-        {q:"What is the capital of Japan?", a:"Tokyo", o:["Kyoto","Osaka","Tokyo","Nagoya"]},
-        {q:"Which language has the most native speakers?", a:"Mandarin Chinese", o:["English","Spanish","Mandarin Chinese","Hindi"]},
-        {q:"What is sushi traditionally wrapped in?", a:"Seaweed", o:["Rice","Seaweed","Soy","Paper"]},
-        {q:"Which continent is the Sahara Desert on?", a:"Africa", o:["Asia","Africa","Australia","America"]},
-        {q:"What is the longest river in the world?", a:"Nile", o:["Amazon","Yangtze","Nile","Danube"]},
-        {q:"Which country invented pizza?", a:"Italy", o:["France","Italy","USA","Greece"]},
-        {q:"What is the largest ocean?", a:"Pacific", o:["Atlantic","Indian","Pacific","Arctic"]},
-        {q:"What is the main ingredient in guacamole?", a:"Avocado", o:["Tomato","Avocado","Pepper","Corn"]},
-        {q:"Which country hosts the Taj Mahal?", a:"India", o:["India","Pakistan","Nepal","Bangladesh"]},
-        {q:"What is the currency of the UK?", a:"Pound Sterling", o:["Euro","Dollar","Pound Sterling","Franc"]},
-    ]
-};
+    <!-- Result / scoreboard screen -->
+    <main id="screen-result" class="screen">
+      <div class="result-box animated-pop">
+        <h2>Category complete!</h2>
+        <p>Your score: <strong id="final-score"></strong></p>
+        <p>Best score for this category: <strong id="final-best-score"></strong></p>
+        <div class="result-actions">
+          <button id="play-again" class="primary-btn">Play again</button>
+          <button id="choose-another" class="secondary-btn">Choose another category</button>
+        </div>
+      </div>
+    </main>
+  </div>
 
-let currentCategory = "";
-let currentIndex = 0;
-let score = 0;
+  <!-- Sounds -->
+  <audio id="sound-click" src="sounds/click.mp3" preload="auto"></audio>
+  <audio id="sound-correct" src="sounds/correct.mp3" preload="auto"></audio>
+  <audio id="sound-wrong" src="sounds/wrong.mp3" preload="auto"></audio>
+  <audio id="sound-victory" src="sounds/victory.mp3" preload="auto"></audio>
 
-function startGame(cat) {
-    currentCategory = cat;
-    currentIndex = 0;
-    score = 0;
-    showQuestion();
-}
-
-function showQuestion() {
-    const q = questions[currentCategory][currentIndex];
-    document.getElementById("game-container").innerHTML = `
-        <h2>${q.q}</h2>
-        ${q.o.map(opt => `<button class="option" onclick="checkAnswer('${opt}')">${opt}</button>`).join("")}
-    `;
-}
-
-function checkAnswer(selected) {
-    const correct = questions[currentCategory][currentIndex].a;
-    if (selected === correct) score++;
-
-    currentIndex++;
-    if (currentIndex < 10) showQuestion();
-    else endGame();
-}
-
-function endGame() {
-    document.getElementById("game-container").innerHTML = `
-        <h2>Quiz Complete!</h2>
-        <p>Your score: ${score} / 10</p>
-        <button onclick="location.reload()">Play Again</button>
-    `;
-}
-</script>
-
+  <script src="js/game.js"></script>
 </body>
 </html>
