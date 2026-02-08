@@ -11,29 +11,29 @@ canvas.height = window.innerHeight;
 //  IMAGES
 // =========================
 const roadImg = new Image();
-roadImg.src = "road.png";
+roadImg.src = "images/road.png";
 
 const playerImg = new Image();
-playerImg.src = "car.png";
+playerImg.src = "images/car.png";
 
 const enemyBlue = new Image();
-enemyBlue.src = "enemy-blue.png";
+enemyBlue.src = "images/enemy-blue.png";
 
 const enemyYellow = new Image();
-enemyYellow.src = "enemy-yellow.png";
+enemyYellow.src = "images/enemy-yellow.png";
 
 const enemyImages = [enemyBlue, enemyYellow];
 
 const policeImg = new Image();
-policeImg.src = "police.png"; // police car sprite
+policeImg.src = "images/police.png";
 
-// Explosion sprite sheet: multiple frames horizontally
+// Explosion sprite sheet: horizontal strip of frames
 const explosionImg = new Image();
-explosionImg.src = "explosion.png"; // e.g. 8 frames in one row
-
+explosionImg.src = "images/explosion.png";
+// Adjust these to match your sprite sheet
 const EXPLOSION_FRAMES = 8;
-const EXPLOSION_FRAME_WIDTH = 256;  // adjust to your sprite
-const EXPLOSION_FRAME_HEIGHT = 256; // adjust to your sprite
+const EXPLOSION_FRAME_WIDTH = 256;
+const EXPLOSION_FRAME_HEIGHT = 256;
 
 // =========================
 //  AUDIO
@@ -42,10 +42,12 @@ const engineSound = new Audio("sounds/engine-loop.mp3");
 engineSound.loop = true;
 
 const crashSound = new Audio("sounds/crash.mp3");
+
 const music = new Audio("sounds/music.mp3");
 music.loop = true;
 
 const nitroSound = new Audio("sounds/nitro.mp3");
+
 const sirenSound = new Audio("sounds/siren.mp3");
 sirenSound.loop = true;
 
@@ -77,7 +79,7 @@ let highScore = Number(localStorage.getItem("highScore") || 0);
 let nitroActive = false;
 let nitroCooldown = false;
 let nitroTimer = 0;
-let nitroDuration = 120; // frames
+let nitroDuration = 120;     // frames
 let nitroCooldownTime = 240; // frames
 
 let policeActive = false;
@@ -86,7 +88,8 @@ let police = {
   y: -200,
   width: 100,
   height: 180,
-  speed: 6
+  speed: 5,
+  maxSpeed: 7
 };
 
 let explosionActive = false;
@@ -224,11 +227,13 @@ setInterval(spawnEnemy, 1200);
 function maybeStartPoliceChase() {
   if (policeActive || gameState !== "playing") return;
 
-  // Small chance each second to start a chase
+  // Small chance each frame to start a chase
   if (Math.random() < 0.01) {
     policeActive = true;
-    police.x = canvas.width / 2 - 40;
+    police.x = canvas.width / 2 - police.width / 2;
     police.y = -200;
+    police.speed = 5;
+
     if (!isMuted) {
       sirenSound.currentTime = 0;
       sirenSound.play();
@@ -305,14 +310,6 @@ function update() {
   enemyCars.forEach((car, index) => {
     car.y += car.speed;
 
-  enemyCars.forEach((car) => {
-  if (checkCollision(police, car)) {
-    // Police slows down when hitting traffic
-    police.y -= police.speed * 2; 
-    police.x += (Math.random() - 0.5) * 40; // small swerve
-  }
-});
-
     // Remove off-screen cars
     if (car.y > canvas.height + 200) {
       enemyCars.splice(index, 1);
@@ -328,20 +325,44 @@ function update() {
   maybeStartPoliceChase();
 
   if (policeActive) {
-    // Simple follow AI
-    if (police.x + police.width / 2 < player.x + player.width / 2) {
-      police.x += police.speed * 0.5;
-    } else if (police.x + police.width / 2 > player.x + player.width / 2) {
-      police.x -= police.speed * 0.5;
+    // Police slowly accelerates to max speed
+    police.speed = Math.min(police.speed + 0.01, police.maxSpeed);
+
+    // Police tries to align with player
+    const policeCenter = police.x + police.width / 2;
+    const playerCenter = player.x + player.width / 2;
+
+    if (policeCenter < playerCenter - 10) {
+      police.x += police.speed * 0.4;
+    } else if (policeCenter > playerCenter + 10) {
+      police.x -= police.speed * 0.4;
     }
+
+    // Move forward
     police.y += police.speed;
 
+    // Police hits traffic
+    enemyCars.forEach((car) => {
+      if (checkCollision(police, car)) {
+        // Police bumps backward
+        police.y -= police.speed * 2;
+
+        // Police swerves left or right
+        police.x += (Math.random() - 0.5) * 60;
+
+        // Police slows down temporarily
+        police.speed *= 0.6;
+      }
+    });
+
+    // Police leaves screen
     if (police.y > canvas.height + 200) {
       policeActive = false;
       sirenSound.pause();
       sirenSound.currentTime = 0;
     }
 
+    // Police catches player
     if (checkCollision(player, police)) {
       handleCrash();
     }
