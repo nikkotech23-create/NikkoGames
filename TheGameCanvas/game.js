@@ -82,11 +82,11 @@ let nitroCooldownTime = 240; // frames
 
 let policeActive = false;
 let police = {
-  x: canvas.width / 2 - 40,
+  x: canvas.width / 2 - 50,
   y: -200,
-  width: 80,
-  height: 160,
-  speed: 12
+  width: 100,
+  height: 180,
+  speed: 6
 };
 
 let explosionActive = false;
@@ -304,6 +304,14 @@ function update() {
   // Move enemies
   enemyCars.forEach((car, index) => {
     car.y += car.speed;
+
+  enemyCars.forEach((car) => {
+  if (checkCollision(police, car)) {
+    // Police slows down when hitting traffic
+    police.y -= police.speed * 2; 
+    police.x += (Math.random() - 0.5) * 40; // small swerve
+  }
+});
 
     // Remove off-screen cars
     if (car.y > canvas.height + 200) {
