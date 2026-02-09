@@ -147,7 +147,7 @@ body.astronomy {
 }
 
 body.movies {
-  background: linear-gradient(135deg, #5b0000, #b31217);
+  background:url("../images/movies.jpg") center/cover fixed no-repeat;
 }
 
 body.history {
@@ -155,7 +155,7 @@ body.history {
 }
 
 body.culture {
-  background: radial-gradient(circle at top, #ff9a9e, #fad0c4, #fbc2eb, #a18cd1);
+  background: url("../images/culture.jpg") center/cover fixed no-repeat;
 }
 
 body.travel {
@@ -167,7 +167,7 @@ body.sports {
 }
 
 body.technology {
-  background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+  background: url("../images/technology.jpg") center/cover fixed no-repeat;
 }
 
 body.food {
