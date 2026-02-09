@@ -1,4 +1,6 @@
-// ====== CANVAS SETUP ======
+/* ============================================
+   SECTION 0: CANVAS & BASIC SETUP
+   ============================================ */
 const canvas = document.getElementById("game-canvas");
 const ctx = canvas.getContext("2d");
 
@@ -11,7 +13,9 @@ function resizeCanvas() {
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
-// ====== IMAGE ASSETS ======
+/* ============================================
+   SECTION 1: ASSETS (IMAGES & AUDIO)
+   ============================================ */
 const IMAGES = {
   player: new Image(),
   enemyTriangle: new Image(),
@@ -24,7 +28,6 @@ IMAGES.enemyTriangle.src = "assets/ships/enemy_triangle.png";
 IMAGES.enemyCrab.src = "assets/ships/enemy_crab.png";
 IMAGES.enemyUfo.src = "assets/ships/enemy_ufo.png";
 
-// ====== AUDIO ======
 const sounds = {
   music: new Audio("assets/audio/music_bg.mp3"),
   laser: new Audio("assets/audio/laser.wav"),
@@ -33,8 +36,12 @@ const sounds = {
 sounds.music.loop = true;
 sounds.music.volume = 0.5;
 
-// ====== GAME STATE ======
-let gameState = "title"; // title | play | boss | warp | landing | paradise | gameover
+/* ============================================
+   SECTION 2: GLOBAL GAME STATE
+   ============================================ */
+let gameState = "title"; 
+// title | story | cutscene | play | boss1 | boss2 | warp | landing | paradise | gameover
+
 let isPaused = false;
 let musicOn = true;
 let controlMode = "touch";
@@ -47,7 +54,8 @@ let player = {
   vy: 0,
   radius: 20,
   alive: true,
-  shield: 0
+  shield: 0,
+  weaponLevel: 1
 };
 
 let bullets = [];
@@ -57,8 +65,8 @@ let bulletCooldownBase = 0.2;
 let enemies = [];
 let enemySpawnTimer = 0;
 
-let boss = null;
-const BOSS_TRIGGER_SCORE = 3000;
+let boss1 = null;
+let boss2 = null;
 
 let explosions = [];
 let powerups = [];
@@ -67,10 +75,45 @@ let score = 0;
 let lives = 3;
 let highScore = 0;
 
+let currentLevel = 1;
+let currentStoryIndex = 0;
+let currentCutscene = null;
+
 let warpTime = 0;
 let landingTime = 0;
 
-// ====== PARALLAX STARFIELD ======
+/* ============================================
+   SECTION 3: LEVELS, STORY, CUTSCENES
+   ============================================ */
+const levelConfigs = [
+  { id: 1, spawnRate: 1.2, enemySpeed: 1, scoreToAdvance: 800 },
+  { id: 2, spawnRate: 1.0, enemySpeed: 1.2, scoreToAdvance: 1800 },
+  { id: 3, spawnRate: 0.8, enemySpeed: 1.4, scoreToAdvance: 2800 },
+  { id: 4, boss: "boss1" },
+  { id: 5, warp: true },
+  { id: 6, boss: "boss2" },
+  { id: 7, paradise: true }
+];
+
+const storyScreens = [
+  "You leave the ruins of the Outer Belt...",
+  "The Nebula of Echoes hums with forgotten wars...",
+  "Beyond the Rift, a new threat awakens...",
+  "The first guardian of Paradise stands in your way...",
+  "Warping through the fabric of starlight...",
+  "The final guardian awaits beyond the void...",
+  "Paradise is within reach..."
+];
+
+const cutscenes = {
+  intro: { type: "intro", time: 0, duration: 3 },
+  boss1Arrival: { type: "boss1Arrival", time: 0, duration: 3 },
+  boss2Arrival: { type: "boss2Arrival", time: 0, duration: 3 }
+};
+
+/* ============================================
+   SECTION 4: PARALLAX STARFIELD
+   ============================================ */
 const stars = [];
 function initStars() {
   stars.length = 0;
@@ -87,7 +130,9 @@ function initStars() {
 }
 initStars();
 
-// ====== UI ELEMENTS ======
+/* ============================================
+   SECTION 5: UI ELEMENTS & SAVE SLOTS
+   ============================================ */
 const btnPause = document.getElementById("btn-pause");
 const btnRestart = document.getElementById("btn-restart");
 const btnOptions = document.getElementById("btn-options");
@@ -99,15 +144,86 @@ const volumeSlider = document.getElementById("volume-slider");
 const controlModeSelect = document.getElementById("control-mode");
 const gamepadStatus = document.getElementById("gamepad-status");
 
-// ====== BUTTON HANDLERS ======
+const saveSlots = [null, null, null];
+
+function loadSaveSlots() {
+  for (let i = 0; i < 3; i++) {
+    try {
+      const data = localStorage.getItem("neon_shooter_save_" + i);
+      if (data) saveSlots[i] = JSON.parse(data);
+    } catch (e) {}
+  }
+}
+function saveToSlot(slotIndex) {
+  const data = {
+    level: currentLevel,
+    score,
+    weaponLevel: player.weaponLevel,
+    shield: player.shield,
+    lives
+  };
+  saveSlots[slotIndex] = data;
+  try {
+    localStorage.setItem("neon_shooter_save_" + slotIndex, JSON.stringify(data));
+  } catch (e) {}
+}
+function loadFromSlot(slotIndex) {
+  const data = saveSlots[slotIndex];
+  if (!data) return;
+  currentLevel = data.level;
+  score = data.score;
+  player.weaponLevel = data.weaponLevel;
+  player.shield = data.shield;
+  lives = data.lives;
+}
+
+try {
+  const savedHigh = localStorage.getItem("neon_shooter_highscore");
+  if (savedHigh) highScore = parseInt(savedHigh, 10) || 0;
+} catch (e) {}
+
+/* ============================================
+   SECTION 6: ACHIEVEMENTS
+   ============================================ */
+const achievements = {
+  firstBlood: false,
+  untouchable: false,
+  bossSlayer1: false,
+  bossSlayer2: false,
+  paradiseFound: false
+};
+let achievementPopups = [];
+
+function unlockAchievement(key, label) {
+  if (achievements[key]) return;
+  achievements[key] = true;
+  achievementPopups.push({ label, time: 0, duration: 3 });
+  try {
+    localStorage.setItem("neon_shooter_achievements", JSON.stringify(achievements));
+  } catch (e) {}
+}
+function loadAchievements() {
+  try {
+    const data = localStorage.getItem("neon_shooter_achievements");
+    if (data) {
+      const parsed = JSON.parse(data);
+      Object.assign(achievements, parsed);
+    }
+  } catch (e) {}
+}
+loadAchievements();
+
+/* ============================================
+   SECTION 7: BUTTON HANDLERS
+   ============================================ */
 btnPause.onclick = () => {
-  if (gameState === "title" || gameState === "paradise") return;
+  if (gameState === "title" || gameState === "paradise" || gameState === "story" || gameState === "cutscene") return;
   isPaused = !isPaused;
   btnPause.textContent = isPaused ? "Resume" : "Pause";
 };
 
 btnRestart.onclick = () => {
-  startGame();
+  startGame(true);
 };
 
 btnOptions.onclick = () => optionsPanel.style.display = "block";
@@ -133,18 +249,15 @@ controlModeSelect.onchange = () => {
   controlMode = controlModeSelect.value;
 };
 
-// ====== HIGH SCORE ======
-try {
-  const saved = localStorage.getItem("neon_shooter_highscore");
-  if (saved) highScore = parseInt(saved, 10) || 0;
-} catch (e) {}
-
-// ====== TOUCH CONTROLS ======
+/* ============================================
+   SECTION 8: TOUCH CONTROLS & JOYSTICK GRAPHICS
+   ============================================ */
 const touchMove = document.getElementById("touch-move");
 const touchFire = document.getElementById("touch-fire");
 
 let touchMoveActive = false;
 let touchMoveCenter = { x: 0, y: 0 };
+let touchMoveOffset = { x: 0, y: 0 };
 
 function getTouchPos(touch, element) {
   const rect = element.getBoundingClientRect();
@@ -156,6 +269,7 @@ touchMove.addEventListener("touchstart", e => {
   e.preventDefault();
   touchMoveActive = true;
   touchMoveCenter = getTouchPos(e.touches[0], touchMove);
+  touchMoveOffset = { x: 0, y: 0 };
 }, { passive: false });
 
 touchMove.addEventListener("touchmove", e => {
@@ -164,39 +278,55 @@ touchMove.addEventListener("touchmove", e => {
   const pos = getTouchPos(e.touches[0], touchMove);
   const dx = pos.x - touchMoveCenter.x;
   const dy = pos.y - touchMoveCenter.y;
+  touchMoveOffset = { x: dx, y: dy };
 
-  player.angle = Math.atan2(dy, dx) + Math.PI / 2;
-  const strength = Math.min(Math.hypot(dx, dy) / 40, 1);
-  const thrust = 200 * strength;
-  player.vx += Math.cos(player.angle - Math.PI / 2) * thrust * 0.016;
-  player.vy += Math.sin(player.angle - Math.PI / 2) * thrust * 0.016;
+  if (gameState === "play" || gameState === "boss1" || gameState === "boss2") {
+    player.angle = Math.atan2(dy, dx) + Math.PI / 2;
+    const strength = Math.min(Math.hypot(dx, dy) / 40, 1);
+    const thrust = 200 * strength;
+    player.vx += Math.cos(player.angle - Math.PI / 2) * thrust * 0.016;
+    player.vy += Math.sin(player.angle - Math.PI / 2) * thrust * 0.016;
+  }
 }, { passive: false });
 
-touchMove.addEventListener("touchend", () => touchMoveActive = false);
+touchMove.addEventListener("touchend", () => {
+  touchMoveActive = false;
+  touchMoveOffset = { x: 0, y: 0 };
+});
 
 touchFire.addEventListener("touchstart", e => {
   if (controlMode !== "touch") return;
   e.preventDefault();
   if (gameState === "title") {
-    startGame();
+    startGame(true);
+  } else if (gameState === "story") {
+    advanceStory();
+  } else if (gameState === "cutscene") {
+    skipCutscene();
   } else {
     tryShoot();
   }
 }, { passive: false });
 
-// ====== KEYBOARD ======
+/* ============================================
+   SECTION 9: KEYBOARD & GAMEPAD
+   ============================================ */
 const keys = {};
 window.addEventListener("keydown", e => {
   keys[e.code] = true;
   if (gameState === "title" && (e.code === "Space" || e.code === "Enter")) {
-    startGame();
+    startGame(true);
+  } else if (gameState === "story" && (e.code === "Space" || e.code === "Enter")) {
+    advanceStory();
+  } else if (gameState === "cutscene" && (e.code === "Space" || e.code === "Enter")) {
+    skipCutscene();
   }
 });
 window.addEventListener("keyup", e => keys[e.code] = false);
 
 function handleKeyboard(dt) {
   if (controlMode !== "keyboard") return;
-  if (gameState !== "play" && gameState !== "boss") return;
+  if (!(gameState === "play" || gameState === "boss1" || gameState === "boss2")) return;
 
   const rotSpeed = 3;
   const thrust = 250;
@@ -212,7 +342,6 @@ function handleKeyboard(dt) {
   }
 }
 
-// ====== GAMEPAD ======
 let gamepadIndex = null;
 
 window.addEventListener("gamepadconnected", e => {
@@ -227,7 +356,7 @@ window.addEventListener("gamepaddisconnected", () => {
 
 function handleGamepad(dt) {
   if (controlMode !== "gamepad") return;
-  if (gameState !== "play" && gameState !== "boss") return;
+  if (!(gameState === "play" || gameState === "boss1" || gameState === "boss2")) return;
   if (gamepadIndex === null) return;
 
   const gp = navigator.getGamepads()[gamepadIndex];
@@ -248,10 +377,18 @@ function handleGamepad(dt) {
   }
 }
 
-// ====== CORE GAME FLOW ======
-function startGame() {
+/* ============================================
+   SECTION 10: CORE GAME FLOW
+   ============================================ */
+function startGame(fromTitle) {
   resetGame();
-  gameState = "play";
+  if (fromTitle) {
+    currentLevel = 1;
+    currentStoryIndex = 0;
+    gameState = "story";
+  } else {
+    gameState = "play";
+  }
   if (musicOn) sounds.music.play();
 }
 
@@ -266,12 +403,14 @@ function resetGame() {
   player.angle = -Math.PI / 2;
   player.alive = true;
   player.shield = 0;
+  player.weaponLevel = 1;
 
   bullets = [];
   enemies = [];
   explosions = [];
   powerups = [];
-  boss = null;
+  boss1 = null;
+  boss2 = null;
 
   score = 0;
   lives = 3;
@@ -285,51 +424,98 @@ function resetGame() {
   initStars();
 }
 
-// Shooting
+function advanceStory() {
+  currentStoryIndex++;
+  if (currentStoryIndex >= storyScreens.length) {
+    gameState = "play";
+  } else {
+    // between levels
+    if (currentLevel === 1 && currentStoryIndex === 1) gameState = "play";
+    else if (currentLevel === 2 && currentStoryIndex === 2) gameState = "play";
+    else if (currentLevel === 3 && currentStoryIndex === 3) gameState = "play";
+    else if (currentLevel === 4 && currentStoryIndex === 4) gameState = "warp";
+    else if (currentLevel === 6 && currentStoryIndex === 6) gameState = "landing";
+  }
+}
+
+function startCutscene(name) {
+  currentCutscene = { ...cutscenes[name], time: 0 };
+  gameState = "cutscene";
+}
+function skipCutscene() {
+  if (!currentCutscene) return;
+  if (currentCutscene.type === "intro") {
+    gameState = "play";
+  } else if (currentCutscene.type === "boss1Arrival") {
+    gameState = "boss1";
+  } else if (currentCutscene.type === "boss2Arrival") {
+    gameState = "boss2";
+  }
+  currentCutscene = null;
+}
+
+/* ============================================
+   SECTION 11: SHOOTING, ENEMIES, BOSSES, POWERUPS
+   ============================================ */
 function tryShoot() {
   if (!player.alive) return;
-  if (gameState !== "play" && gameState !== "boss") return;
+  if (!(gameState === "play" || gameState === "boss1" || gameState === "boss2")) return;
   if (bulletCooldown > 0) return;
 
   const speed = 400;
   const dirX = Math.cos(player.angle - Math.PI / 2);
   const dirY = Math.sin(player.angle - Math.PI / 2);
 
-  bullets.push({
-    x: player.x + dirX * 24,
-    y: player.y + dirY * 24,
-    vx: dirX * speed,
-    vy: dirY * speed,
-    radius: 4
-  });
+  const patterns = [];
+  if (player.weaponLevel === 1) {
+    patterns.push(0);
+  } else if (player.weaponLevel === 2) {
+    patterns.push(-0.1, 0.1);
+  } else if (player.weaponLevel === 3) {
+    patterns.push(-0.15, 0, 0.15);
+  } else if (player.weaponLevel >= 4) {
+    patterns.push(-0.2, -0.07, 0.07, 0.2);
+  }
+
+  for (const offset of patterns) {
+    const angle = player.angle + offset;
+    const dx = Math.cos(angle - Math.PI / 2);
+    const dy = Math.sin(angle - Math.PI / 2);
+    bullets.push({
+      x: player.x + dx * 24,
+      y: player.y + dy * 24,
+      vx: dx * speed,
+      vy: dy * speed,
+      radius: 4
+    });
+  }
 
   bulletCooldown = bulletCooldownBase;
   sounds.laser.currentTime = 0;
   sounds.laser.play();
 }
 
-// Enemy spawning
 function spawnEnemy() {
+  const cfg = levelConfigs.find(l => l.id === currentLevel) || levelConfigs[0];
   const types = ["triangle", "crab", "ufo"];
   const type = types[Math.floor(Math.random() * types.length)];
   const w = canvas.width / window.devicePixelRatio;
   const x = 40 + Math.random() * (w - 80);
   const y = -40;
-  const speed = 40 + Math.random() * 60;
+  const baseSpeed = 40 + Math.random() * 60;
 
   enemies.push({
     type,
     x,
     y,
-    vy: speed,
+    vy: baseSpeed * (cfg.enemySpeed || 1),
     radius: 20,
     hp: 1
   });
 }
 
-// Power-ups
 function spawnPowerup(x, y) {
-  const types = ["shield", "score", "rapid"];
+  const types = ["shield", "score", "rapid", "weapon"];
   const type = types[Math.floor(Math.random() * types.length)];
   powerups.push({
     type,
@@ -350,13 +536,14 @@ function applyPowerup(p) {
     setTimeout(() => {
       bulletCooldownBase = 0.2;
     }, 8000);
+  } else if (p.type === "weapon") {
+    player.weaponLevel = Math.min(player.weaponLevel + 1, 4);
   }
 }
 
-// Boss
-function spawnBoss() {
+function spawnBoss1() {
   const w = canvas.width / window.devicePixelRatio;
-  boss = {
+  boss1 = {
     x: w / 2,
     y: 120,
     vx: 60,
@@ -365,15 +552,32 @@ function spawnBoss() {
     maxHp: 60
   };
 }
+function spawnBoss2() {
+  const w = canvas.width / window.devicePixelRatio;
+  boss2 = {
+    x: w / 2,
+    y: 120,
+    vx: 80,
+    radius: 70,
+    hp: 90,
+    maxHp: 90
+  };
+}
 
-// ====== UPDATE ======
+/* ============================================
+   SECTION 12: UPDATE LOGIC (LEVELS, BOSSES, WARP, LANDING)
+   ============================================ */
 function update(dt) {
-  if (gameState === "play" || gameState === "boss") {
+  if (gameState === "play" || gameState === "boss1" || gameState === "boss2") {
     updatePlay(dt);
   } else if (gameState === "warp") {
     updateWarp(dt);
   } else if (gameState === "landing") {
     updateLanding(dt);
+  } else if (gameState === "cutscene") {
+    updateCutscene(dt);
+  } else if (gameState === "story") {
+    updateStars(dt, 1);
   }
 }
 
@@ -387,20 +591,17 @@ function updatePlay(dt) {
   const w = canvas.width / window.devicePixelRatio;
   const h = canvas.height / window.devicePixelRatio;
 
-  // Player physics
   player.x += player.vx * dt;
   player.y += player.vy * dt;
   const friction = 0.98;
   player.vx *= friction;
   player.vy *= friction;
 
-  // Screen wrap
   if (player.x < -30) player.x = w + 30;
   if (player.x > w + 30) player.x = -30;
   if (player.y < -30) player.y = h + 30;
   if (player.y > h + 30) player.y = -30;
 
-  // Bullets
   bulletCooldown = Math.max(0, bulletCooldown - dt);
   bullets = bullets.filter(b => {
     b.x += b.vx * dt;
@@ -408,11 +609,13 @@ function updatePlay(dt) {
     return b.x > -20 && b.x < w + 20 && b.y > -20 && b.y < h + 20;
   });
 
-  // Enemies
-  enemySpawnTimer -= dt;
-  if (enemySpawnTimer <= 0) {
-    spawnEnemy();
-    enemySpawnTimer = 1.2;
+  const cfg = levelConfigs.find(l => l.id === currentLevel) || levelConfigs[0];
+  if (!cfg.boss && !cfg.warp && !cfg.paradise) {
+    enemySpawnTimer -= dt;
+    if (enemySpawnTimer <= 0) {
+      spawnEnemy();
+      enemySpawnTimer = cfg.spawnRate || 1.2;
+    }
   }
 
   enemies = enemies.filter(e => {
@@ -420,13 +623,11 @@ function updatePlay(dt) {
     return e.y < h + 60;
   });
 
-  // Powerups
   powerups = powerups.filter(p => {
     p.y += p.vy * dt;
     return p.y < h + 60;
   });
 
-  // Collisions: bullets vs enemies
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
     for (let j = bullets.length - 1; j >= 0; j--) {
@@ -434,6 +635,7 @@ function updatePlay(dt) {
       if (circleHit(e.x, e.y, e.radius, b.x, b.y, b.radius)) {
         bullets.splice(j, 1);
         e.hp -= 1;
+        if (!achievements.firstBlood) unlockAchievement("firstBlood", "First Blood");
         if (e.hp <= 0) {
           enemies.splice(i, 1);
           addExplosion(e.x, e.y);
@@ -445,7 +647,6 @@ function updatePlay(dt) {
     }
   }
 
-  // Collisions: powerups vs player
   for (let i = powerups.length - 1; i >= 0; i--) {
     const p = powerups[i];
     if (circleHit(p.x, p.y, p.radius, player.x, player.y, player.radius)) {
@@ -454,7 +655,6 @@ function updatePlay(dt) {
     }
   }
 
-  // Collisions: enemies vs player
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
     if (circleHit(e.x, e.y, e.radius, player.x, player.y, player.radius)) {
@@ -466,48 +666,98 @@ function updatePlay(dt) {
         lives -= 1;
         if (lives <= 0) {
           player.alive = false;
+          gameState = "gameover";
+          handleHighScore();
         }
       }
     }
   }
 
-  // Boss trigger
-  if (score >= BOSS_TRIGGER_SCORE && !boss) {
-    spawnBoss();
-    gameState = "boss";
-  }
+  if (gameState === "boss1" && boss1) updateBoss1(dt);
+  if (gameState === "boss2" && boss2) updateBoss2(dt);
 
-  // Stars
   updateStars(dt, 1);
+
+  if (!cfg.boss && !cfg.warp && !cfg.paradise && score >= cfg.scoreToAdvance) {
+    currentLevel++;
+    currentStoryIndex = Math.min(currentStoryIndex + 1, storyScreens.length - 1);
+    const nextCfg = levelConfigs.find(l => l.id === currentLevel);
+    if (nextCfg && nextCfg.boss === "boss1") {
+      startCutscene("boss1Arrival");
+    } else if (nextCfg && nextCfg.boss === "boss2") {
+      startCutscene("boss2Arrival");
+    } else if (nextCfg && nextCfg.warp) {
+      gameState = "warp";
+      warpTime = 0;
+    } else if (nextCfg && nextCfg.paradise) {
+      gameState = "landing";
+      landingTime = 0;
+    } else {
+      gameState = "story";
+    }
+  }
 }
 
-function updateBoss(dt) {
-  if (!boss) return;
+function updateBoss1(dt) {
   const w = canvas.width / window.devicePixelRatio;
+  boss1.x += boss1.vx * dt;
+  if (boss1.x < 80 || boss1.x > w - 80) boss1.vx *= -1;
 
-  boss.x += boss.vx * dt;
-  if (boss.x < 80 || boss.x > w - 80) boss.vx *= -1;
-
-  // Boss collisions with bullets
   for (let j = bullets.length - 1; j >= 0; j--) {
     const b = bullets[j];
-    if (circleHit(boss.x, boss.y, boss.radius, b.x, b.y, b.radius)) {
+    if (circleHit(boss1.x, boss1.y, boss1.radius, b.x, b.y, b.radius)) {
       bullets.splice(j, 1);
-      boss.hp -= 1;
+      boss1.hp -= 1;
       addExplosion(b.x, b.y);
       score += 20;
-      if (boss.hp <= 0) {
-        addExplosion(boss.x, boss.y);
-        boss = null;
-        gameState = "warp";
-        warpTime = 0;
-        handleHighScore(); // in case score beats record
+      if (boss1.hp <= 0) {
+        addExplosion(boss1.x, boss1.y);
+        boss1 = null;
+        unlockAchievement("bossSlayer1", "Boss Slayer I");
+        currentLevel++;
+        gameState = "story";
       }
     }
   }
 
-  // Boss vs player
-  if (boss && circleHit(boss.x, boss.y, boss.radius, player.x, player.y, player.radius)) {
+  if (boss1 && circleHit(boss1.x, boss1.y, boss1.radius, player.x, player.y, player.radius)) {
+    addExplosion(player.x, player.y);
+    if (player.shield > 0) {
+      player.shield -= 1;
+    } else {
+      lives -= 1;
+      if (lives <= 0) {
+        player.alive = false;
+        gameState = "gameover";
+        handleHighScore();
+      }
+    }
+  }
+}
+
+function updateBoss2(dt) {
+  const w = canvas.width / window.devicePixelRatio;
+  boss2.x += boss2.vx * dt;
+  if (boss2.x < 80 || boss2.x > w - 80) boss2.vx *= -1;
+
+  for (let j = bullets.length - 1; j >= 0; j--) {
+    const b = bullets[j];
+    if (circleHit(boss2.x, boss2.y, boss2.radius, b.x, b.y, b.radius)) {
+      bullets.splice(j, 1);
+      boss2.hp -= 1;
+      addExplosion(b.x, b.y);
+      score += 30;
+      if (boss2.hp <= 0) {
+        addExplosion(boss2.x, boss2.y);
+        boss2 = null;
+        unlockAchievement("bossSlayer2", "Boss Slayer II");
+        gameState = "warp";
+        warpTime = 0;
+      }
+    }
+  }
+
+  if (boss2 && circleHit(boss2.x, boss2.y, boss2.radius, player.x, player.y, player.radius)) {
     addExplosion(player.x, player.y);
     if (player.shield > 0) {
       player.shield -= 1;
@@ -524,7 +774,7 @@ function updateBoss(dt) {
 
 function updateWarp(dt) {
   warpTime += dt;
-  updateStars(dt, 6); // much faster
+  updateStars(dt, 6);
   if (warpTime > 4) {
     gameState = "landing";
     landingTime = 0;
@@ -536,31 +786,28 @@ function updateLanding(dt) {
   updateStars(dt, 0.5);
   if (landingTime > 3) {
     gameState = "paradise";
+    unlockAchievement("paradiseFound", "Paradise Found");
   }
 }
 
-// Stars update
-function updateStars(dt, speedMultiplier) {
-  const w = canvas.width / window.devicePixelRatio;
-  const h = canvas.height / window.devicePixelRatio;
-  for (const s of stars) {
-    s.y += s.speed * s.z * dt * speedMultiplier;
-    if (s.y > h) {
-      s.y = 0;
-      s.x = Math.random() * w;
-      s.z = 0.3 + Math.random() * 0.7;
-    }
+function updateCutscene(dt) {
+  if (!currentCutscene) return;
+  currentCutscene.time += dt;
+  updateStars(dt, 1);
+  if (currentCutscene.time >= currentCutscene.duration) {
+    skipCutscene();
   }
 }
 
-// Circle collision helper
+/* ============================================
+   SECTION 13: COLLISION, EXPLOSIONS, HIGH SCORE
+   ============================================ */
 function circleHit(x1, y1, r1, x2, y2, r2) {
   const dx = x1 - x2;
   const dy = y1 - y2;
   return dx * dx + dy * dy <= (r1 + r2) * (r1 + r2);
 }
 
-// Explosions
 function addExplosion(x, y) {
   explosions.push({
     x,
@@ -572,7 +819,6 @@ function addExplosion(x, y) {
   sounds.explosion.play();
 }
 
-// High score
 function handleHighScore() {
   if (score > highScore) {
     highScore = score;
@@ -582,7 +828,9 @@ function handleHighScore() {
   }
 }
 
-// ====== DRAWING ======
+/* ============================================
+   SECTION 14: DRAWING (NEON EFFECTS, HUD, SCENES)
+   ============================================ */
 function drawPlayer() {
   if (!player.alive) return;
   if (!IMAGES.player.complete) return;
@@ -590,31 +838,52 @@ function drawPlayer() {
   ctx.save();
   ctx.translate(player.x, player.y);
   ctx.rotate(player.angle);
+
+  ctx.globalCompositeOperation = "lighter";
+  ctx.shadowBlur = 20;
+  ctx.shadowColor = "#00ffff";
   ctx.drawImage(IMAGES.player, -32, -32, 64, 64);
 
   if (player.shield > 0) {
     ctx.strokeStyle = "rgba(0, 255, 255, 0.8)";
     ctx.lineWidth = 3;
-    ctx.shadowBlur = 15;
-    ctx.shadowColor = "#00ffff";
     ctx.beginPath();
     ctx.arc(0, 0, 28, 0, Math.PI * 2);
     ctx.stroke();
   }
 
   ctx.restore();
+  ctx.globalCompositeOperation = "source-over";
 }
 
 function drawEnemyTriangle(x, y) {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.shadowBlur = 15;
+  ctx.shadowColor = "#ff0000";
   ctx.drawImage(IMAGES.enemyTriangle, x - 24, y - 24, 48, 48);
+  ctx.restore();
+  ctx.globalCompositeOperation = "source-over";
 }
 
 function drawEnemyCrab(x, y) {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.shadowBlur = 15;
+  ctx.shadowColor = "#ff00ff";
   ctx.drawImage(IMAGES.enemyCrab, x - 24, y - 24, 48, 48);
+  ctx.restore();
+  ctx.globalCompositeOperation = "source-over";
 }
 
 function drawEnemyUfo(x, y) {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.shadowBlur = 15;
+  ctx.shadowColor = "#00ff99";
   ctx.drawImage(IMAGES.enemyUfo, x - 24, y - 24, 48, 48);
+  ctx.restore();
+  ctx.globalCompositeOperation = "source-over";
 }
 
 function drawEnemies() {
@@ -625,32 +894,34 @@ function drawEnemies() {
   }
 }
 
-function drawBoss() {
+function drawBoss(boss, color) {
   if (!boss) return;
   ctx.save();
   ctx.translate(boss.x, boss.y);
-  ctx.strokeStyle = "rgba(255, 0, 255, 0.9)";
+  ctx.globalCompositeOperation = "lighter";
+  ctx.strokeStyle = color;
   ctx.lineWidth = 4;
   ctx.shadowBlur = 25;
-  ctx.shadowColor = "#ff00ff";
+  ctx.shadowColor = color;
   ctx.beginPath();
   ctx.arc(0, 0, boss.radius, 0, Math.PI * 2);
   ctx.stroke();
   ctx.restore();
+  ctx.globalCompositeOperation = "source-over";
 
-  // Boss HP bar
   const w = canvas.width / window.devicePixelRatio;
   ctx.save();
   ctx.fillStyle = "rgba(0,0,0,0.6)";
   ctx.fillRect(w / 2 - 120, 20, 240, 12);
   const ratio = boss.hp / boss.maxHp;
-  ctx.fillStyle = "#ff00ff";
+  ctx.fillStyle = color;
   ctx.fillRect(w / 2 - 120, 20, 240 * ratio, 12);
   ctx.restore();
 }
 
 function drawBullets() {
   ctx.save();
+  ctx.globalCompositeOperation = "lighter";
   ctx.fillStyle = "rgba(0, 255, 255, 0.9)";
   ctx.shadowBlur = 10;
   ctx.shadowColor = "#00ffff";
@@ -660,6 +931,7 @@ function drawBullets() {
     ctx.fill();
   }
   ctx.restore();
+  ctx.globalCompositeOperation = "source-over";
 }
 
 function drawExplosions() {
@@ -671,6 +943,7 @@ function drawExplosions() {
     const alpha = 1 - t;
 
     ctx.save();
+    ctx.globalCompositeOperation = "lighter";
     ctx.strokeStyle = `rgba(255, 255, 0, ${alpha})`;
     ctx.lineWidth = 2;
     ctx.shadowBlur = 20;
@@ -679,6 +952,7 @@ function drawExplosions() {
     ctx.arc(ex.x, ex.y, radius, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
+    ctx.globalCompositeOperation = "source-over";
     return true;
   });
 }
@@ -687,22 +961,27 @@ function drawPowerups() {
   for (const p of powerups) {
     ctx.save();
     ctx.translate(p.x, p.y);
-    ctx.shadowBlur = 15;
+    ctx.globalCompositeOperation = "lighter";
     if (p.type === "shield") {
       ctx.strokeStyle = "#00ffff";
       ctx.shadowColor = "#00ffff";
     } else if (p.type === "score") {
       ctx.strokeStyle = "#ffff00";
       ctx.shadowColor = "#ffff00";
-    } else {
+    } else if (p.type === "rapid") {
       ctx.strokeStyle = "#ff00ff";
       ctx.shadowColor = "#ff00ff";
+    } else {
+      ctx.strokeStyle = "#00ff99";
+      ctx.shadowColor = "#00ff99";
     }
+    ctx.shadowBlur = 15;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
+    ctx.globalCompositeOperation = "source-over";
   }
 }
 
@@ -721,6 +1000,8 @@ function drawHUD() {
   ctx.fillText(`High: ${highScore}`, 16, 44);
   ctx.fillText(`Lives: ${lives}`, 16, 64);
   ctx.fillText(`Shield: ${player.shield}`, 16, 84);
+  ctx.fillText(`Weapon: ${player.weaponLevel}`, 16, 104);
+  ctx.fillText(`Level: ${currentLevel}`, 16, 124);
 
   if (gameState === "gameover") {
     ctx.font = "24px system-ui";
@@ -732,6 +1013,30 @@ function drawHUD() {
   }
 
   ctx.restore();
+
+  drawAchievementPopups();
+}
+
+function drawAchievementPopups() {
+  const w = canvas.width / window.devicePixelRatio;
+  achievementPopups = achievementPopups.filter(a => {
+    a.time += 1 / 60;
+    const t = a.time / a.duration;
+    if (t >= 1) return false;
+    const y = 80 + 40 * t;
+    const alpha = 1 - t;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = "center";
+    ctx.font = "14px system-ui";
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = "#ffff00";
+    ctx.fillStyle = "#ffff00";
+    ctx.fillText(`Achievement Unlocked: ${a.label}`, w / 2, y);
+    ctx.restore();
+    return true;
+  });
 }
 
 function drawStars(multiplier = 1) {
@@ -774,6 +1079,61 @@ function drawTitleScreen() {
   ctx.font = "14px system-ui";
   ctx.fillText(`High Score: ${highScore}`, w / 2, h / 2 + 40);
 
+  ctx.restore();
+}
+
+function drawStoryScreen() {
+  const w = canvas.width / window.devicePixelRatio;
+  const h = canvas.height / window.devicePixelRatio;
+
+  drawBackground();
+
+  const text = storyScreens[currentStoryIndex] || "";
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.shadowBlur = 20;
+  ctx.shadowColor = "#00ffff";
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "18px system-ui";
+  ctx.fillText(text, w / 2, h / 2);
+
+  ctx.font = "14px system-ui";
+  ctx.shadowColor = "#ff00ff";
+  ctx.fillText("Tap Fire / Press Space to continue", w / 2, h / 2 + 40);
+  ctx.restore();
+}
+
+function drawCutscene() {
+  const w = canvas.width / window.devicePixelRatio;
+  const h = canvas.height / window.devicePixelRatio;
+
+  drawBackground();
+
+  if (!currentCutscene) return;
+  const t = Math.min(currentCutscene.time / currentCutscene.duration, 1);
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.shadowBlur = 20;
+  ctx.shadowColor = "#00ffff";
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "18px system-ui";
+
+  if (currentCutscene.type === "intro") {
+    const y = h * (0.8 - 0.3 * t);
+    ctx.fillText("Your journey begins...", w / 2, y);
+  } else if (currentCutscene.type === "boss1Arrival") {
+    const y = h * (0.2 + 0.3 * t);
+    ctx.fillText("A guardian emerges from the void...", w / 2, y);
+  } else if (currentCutscene.type === "boss2Arrival") {
+    const y = h * (0.2 + 0.3 * t);
+    ctx.fillText("The final guardian blocks your path...", w / 2, y);
+  }
+
+  ctx.font = "14px system-ui";
+  ctx.shadowColor = "#ff00ff";
+  ctx.fillText("Tap Fire / Press Space to skip", w / 2, h - 40);
   ctx.restore();
 }
 
@@ -860,7 +1220,55 @@ function drawParadise() {
   ctx.restore();
 }
 
-// ====== GAME LOOP ======
+function drawJoystickOverlay() {
+  const rect = touchMove.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+
+  const canvasRect = canvas.getBoundingClientRect();
+  const x = cx - canvasRect.left;
+  const y = cy - canvasRect.top;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.strokeStyle = "rgba(0,255,255,0.5)";
+  ctx.lineWidth = 2;
+  ctx.shadowBlur = 10;
+  ctx.shadowColor = "#00ffff";
+  ctx.beginPath();
+  ctx.arc(x, y, rect.width / 2, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const knobX = x + touchMoveOffset.x * 0.5;
+  const knobY = y + touchMoveOffset.y * 0.5;
+  ctx.fillStyle = "rgba(0,255,255,0.7)";
+  ctx.beginPath();
+  ctx.arc(knobX, knobY, rect.width / 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+  ctx.globalCompositeOperation = "source-over";
+}
+
+/* ============================================
+   SECTION 15: STARS UPDATE
+   ============================================ */
+function updateStars(dt, speedMultiplier) {
+  const w = canvas.width / window.devicePixelRatio;
+  const h = canvas.height / window.devicePixelRatio;
+  for (const s of stars) {
+    s.y += s.speed * s.z * dt * speedMultiplier;
+    if (s.y > h) {
+      s.y = 0;
+      s.x = Math.random() * w;
+      s.z = 0.3 + Math.random() * 0.7;
+    }
+  }
+}
+
+/* ============================================
+   SECTION 16: MAIN GAME LOOP
+   ============================================ */
 let lastTime = performance.now();
 
 function gameLoop(t) {
@@ -870,28 +1278,22 @@ function gameLoop(t) {
   if (!isPaused) {
     handleKeyboard(dt);
     handleGamepad(dt);
-
-    if (gameState === "play") {
-      updatePlay(dt);
-    } else if (gameState === "boss") {
-      updatePlay(dt);
-      updateBoss(dt);
-    } else if (gameState === "warp") {
-      updateWarp(dt);
-    } else if (gameState === "landing") {
-      updateLanding(dt);
-    } else if (gameState === "title" || gameState === "paradise" || gameState === "gameover") {
-      updateStars(dt, 1);
-    }
+    update(dt);
   }
 
   if (gameState === "title") {
+    updateStars(dt, 1);
     drawTitleScreen();
-  } else if (gameState === "play" || gameState === "boss" || gameState === "gameover") {
+  } else if (gameState === "story") {
+    drawStoryScreen();
+  } else if (gameState === "cutscene") {
+    drawCutscene();
+  } else if (gameState === "play" || gameState === "boss1" || gameState === "boss2" || gameState === "gameover") {
     drawBackground();
     drawPlayer();
     drawEnemies();
-    if (boss) drawBoss();
+    if (gameState === "boss1" && boss1) drawBoss(boss1, "#ff00ff");
+    if (gameState === "boss2" && boss2) drawBoss(boss2, "#ffff00");
     drawBullets();
     drawPowerups();
     drawExplosions();
@@ -902,6 +1304,10 @@ function gameLoop(t) {
     drawLanding();
   } else if (gameState === "paradise") {
     drawParadise();
+  }
+
+  if (controlMode === "touch") {
+    drawJoystickOverlay();
   }
 
   requestAnimationFrame(gameLoop);
