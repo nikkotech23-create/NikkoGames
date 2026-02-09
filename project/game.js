@@ -1,6 +1,18 @@
 /* ============================================
-   SECTION 0: CANVAS & BASIC SETUP
+   NEON VECTOR SHOOTER – MASSIVE UPDATE BUILD
+   Features:
+   - 5 levels + Paradise + Endless
+   - Mini-bosses, bosses with unique patterns
+   - New enemy formations
+   - Shop between levels
+   - Unlockable ships
+   - Title-screen animation
+   - New Game+
+   - Boss Rush mode
+   - Soundtrack selector
    ============================================ */
+
+/* ========== SECTION 0: CANVAS & BASIC SETUP ========== */
 const canvas = document.getElementById("game-canvas");
 const ctx = canvas.getContext("2d");
 
@@ -13,11 +25,13 @@ function resizeCanvas() {
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
-/* ============================================
-   SECTION 1: ASSETS (IMAGES & AUDIO)
-   ============================================ */
+/* ========== SECTION 1: ASSETS (IMAGES & AUDIO) ========== */
 const IMAGES = {
-  player: new Image(),
+  playerStriker: new Image(),
+  playerPhantom: new Image(),
+  playerTitan: new Image(),
+  playerNova: new Image(),
+  playerWraith: new Image(),
   enemyTriangle: new Image(),
   enemyCrab: new Image(),
   enemyUfo: new Image(),
@@ -28,7 +42,12 @@ const IMAGES = {
   boss5: new Image()
 };
 
-IMAGES.player.src = "assets/ships/player_ship.png";
+IMAGES.playerStriker.src = "assets/ships/player_striker.png";
+IMAGES.playerPhantom.src = "assets/ships/player_phantom.png";
+IMAGES.playerTitan.src = "assets/ships/player_titan.png";
+IMAGES.playerNova.src = "assets/ships/player_nova.png";
+IMAGES.playerWraith.src = "assets/ships/player_wraith.png";
+
 IMAGES.enemyTriangle.src = "assets/ships/enemy_triangle.png";
 IMAGES.enemyCrab.src = "assets/ships/enemy_crab.png";
 IMAGES.enemyUfo.src = "assets/ships/enemy_ufo.png";
@@ -39,38 +58,110 @@ IMAGES.boss3.src = "assets/bosses/boss3.png";
 IMAGES.boss4.src = "assets/bosses/boss4.png";
 IMAGES.boss5.src = "assets/bosses/boss5.png";
 
+const musicTracks = [
+  { id: "neon_drift", label: "Neon Drift", src: "assets/audio/music_neon_drift.mp3" },
+  { id: "cyberstorm", label: "Cyberstorm", src: "assets/audio/music_cyberstorm.mp3" },
+  { id: "starfall", label: "Starfall", src: "assets/audio/music_starfall.mp3" },
+  { id: "hyperdrive", label: "Hyperdrive", src: "assets/audio/music_hyperdrive.mp3" },
+  { id: "retro_pulse", label: "Retro Pulse", src: "assets/audio/music_retro_pulse.mp3" }
+];
+
+let currentMusicIndex = 0;
+let music = new Audio(musicTracks[currentMusicIndex].src);
+music.loop = true;
+music.volume = 0.5;
+
 const sounds = {
-  music: new Audio("assets/audio/music_bg.mp3"),
   laser: new Audio("assets/audio/laser.wav"),
   explosion: new Audio("assets/audio/explosion.wav"),
-  bossLaser: new Audio("assets/audio/boss_laser.wav")
+  bossLaser: new Audio("assets/audio/boss_laser.wav"),
+  shopBuy: new Audio("assets/audio/shop_buy.wav"),
+  menuMove: new Audio("assets/audio/menu_move.wav"),
+  menuSelect: new Audio("assets/audio/menu_select.wav")
 };
-sounds.music.loop = true;
-sounds.music.volume = 0.5;
+sounds.laser.volume = 0.5;
+sounds.explosion.volume = 0.5;
+sounds.bossLaser.volume = 0.5;
+sounds.shopBuy.volume = 0.5;
+sounds.menuMove.volume = 0.5;
+sounds.menuSelect.volume = 0.5;
 
-/* ============================================
-   SECTION 2: GLOBAL GAME STATE
-   ============================================ */
+/* ========== SECTION 2: GLOBAL GAME STATE ========== */
+// gameState: title, mainmenu, shipselect, soundtrack, story, play, boss, bossrush, endless, dialogue, cutscene, shop, warp, landing, paradise, gameover
 let gameState = "title";
-// title | story | dialogue | cutscene | play | boss | warp | landing | paradise | endless | gameover
-
+let gameMode = "story"; // story | bossrush | endless | ngplus
 let isPaused = false;
 let musicOn = true;
 let controlMode = "touch";
 
+const ships = [
+  {
+    id: "striker",
+    name: "Striker",
+    imgKey: "playerStriker",
+    speed: 260,
+    baseWeaponLevel: 1,
+    baseShield: 0,
+    unlocked: true,
+    desc: "Balanced all-rounder."
+  },
+  {
+    id: "phantom",
+    name: "Phantom",
+    imgKey: "playerPhantom",
+    speed: 320,
+    baseWeaponLevel: 2,
+    baseShield: 0,
+    unlocked: false,
+    desc: "Fast, fragile, multi-shot."
+  },
+  {
+    id: "titan",
+    name: "Titan",
+    imgKey: "playerTitan",
+    speed: 200,
+    baseWeaponLevel: 1,
+    baseShield: 2,
+    unlocked: false,
+    desc: "Slow, tanky, heavy shots."
+  },
+  {
+    id: "nova",
+    name: "Nova",
+    imgKey: "playerNova",
+    speed: 250,
+    baseWeaponLevel: 1,
+    baseShield: 1,
+    unlocked: false,
+    desc: "Charge beam specialist."
+  },
+  {
+    id: "wraith",
+    name: "Wraith",
+    imgKey: "playerWraith",
+    speed: 280,
+    baseWeaponLevel: 2,
+    baseShield: 1,
+    unlocked: false,
+    desc: "Cloak ability (future)."
+  }
+];
+let selectedShipIndex = 0;
+
 let player = {
   x: 200,
   y: 400,
-  angle: -Math.PI / 2,
   vx: 0,
   vy: 0,
   radius: 20,
   alive: true,
   shield: 0,
-  weaponLevel: 1
+  weaponLevel: 1,
+  speed: 260,
+  img: IMAGES.playerStriker
 };
 
-let moveInput = { x: 0, y: 0 }; // steady directional movement
+let moveInput = { x: 0, y: 0 };
 
 let bullets = [];
 let bulletCooldown = 0;
@@ -78,23 +169,25 @@ let bulletCooldownBase = 0.2;
 
 let enemies = [];
 let enemySpawnTimer = 0;
+let formationTimer = 0;
 
-let bosses = [null, null, null, null, null]; // index 0..4
+let bosses = [null, null, null, null, null];
 let currentBossIndex = -1;
 let miniBoss = null;
-
 let bossBullets = [];
 
 let explosions = [];
 let powerups = [];
 
 let score = 0;
+let credits = 0;
 let lives = 3;
 let highScore = 0;
 
 let currentLevel = 1;
 let currentStoryIndex = 0;
 let currentCutscene = null;
+let currentDialogue = null;
 
 let warpTime = 0;
 let landingTime = 0;
@@ -103,14 +196,12 @@ let killsThisLevel = 0;
 let miniBossSpawned = false;
 
 let endlessMode = false;
+let newGamePlus = false;
 
-/* screen shake */
 let shakeTime = 0;
 let shakeIntensity = 0;
 
-/* ============================================
-   SECTION 3: LEVELS, STORY, CUTSCENES
-   ============================================ */
+/* ========== SECTION 3: LEVELS, STORY, CUTSCENES ========== */
 const levelConfigs = [
   { id: 1, spawnRate: 1.2, enemySpeed: 1 },
   { id: 2, spawnRate: 1.0, enemySpeed: 1.2 },
@@ -143,17 +234,12 @@ const bossDialogues = {
   5: "Final Boss: You are not worthy of Paradise!"
 };
 
-let currentDialogue = null;
-
-/* ============================================
-   SECTION 4: PARALLAX STARFIELD
-   ============================================ */
 const stars = [];
 function initStars() {
   stars.length = 0;
   const w = canvas.width / window.devicePixelRatio;
   const h = canvas.height / window.devicePixelRatio;
-  for (let i = 0; i < 120; i++) {
+  for (let i = 0; i < 140; i++) {
     stars.push({
       x: Math.random() * w,
       y: Math.random() * h,
@@ -164,9 +250,7 @@ function initStars() {
 }
 initStars();
 
-/* ============================================
-   SECTION 5: UI ELEMENTS & SAVE SLOTS
-   ============================================ */
+/* ========== SECTION 4: UI ELEMENTS & SAVE SLOTS ========== */
 const btnPause = document.getElementById("btn-pause");
 const btnRestart = document.getElementById("btn-restart");
 const btnOptions = document.getElementById("btn-options");
@@ -192,9 +276,12 @@ function saveToSlot(slotIndex) {
   const data = {
     level: currentLevel,
     score,
+    credits,
     weaponLevel: player.weaponLevel,
     shield: player.shield,
-    lives
+    lives,
+    selectedShipIndex,
+    newGamePlus
   };
   saveSlots[slotIndex] = data;
   try {
@@ -206,9 +293,13 @@ function loadFromSlot(slotIndex) {
   if (!data) return;
   currentLevel = data.level;
   score = data.score;
+  credits = data.credits || 0;
   player.weaponLevel = data.weaponLevel;
   player.shield = data.shield;
   lives = data.lives;
+  selectedShipIndex = data.selectedShipIndex || 0;
+  newGamePlus = !!data.newGamePlus;
+  applySelectedShip();
 }
 
 try {
@@ -216,9 +307,7 @@ try {
   if (savedHigh) highScore = parseInt(savedHigh, 10) || 0;
 } catch (e) {}
 
-/* ============================================
-   SECTION 6: ACHIEVEMENTS
-   ============================================ */
+/* ========== SECTION 5: ACHIEVEMENTS ========== */
 const achievements = {
   firstBlood: false,
   bossSlayer1: false,
@@ -226,7 +315,13 @@ const achievements = {
   bossSlayer3: false,
   bossSlayer4: false,
   bossSlayer5: false,
-  paradiseFound: false
+  paradiseFound: false,
+  bossRushClear: false,
+  ngPlusUnlock: false,
+  phantomUnlock: false,
+  titanUnlock: false,
+  novaUnlock: false,
+  wraithUnlock: false
 };
 let achievementPopups = [];
 
@@ -249,26 +344,25 @@ function loadAchievements() {
 }
 loadAchievements();
 
-/* ============================================
-   SECTION 7: BUTTON HANDLERS
-   ============================================ */
+/* ========== SECTION 6: BUTTON HANDLERS ========== */
 btnPause.onclick = () => {
-  if (["title", "paradise", "story", "cutscene", "dialogue"].includes(gameState)) return;
+  if (["title", "mainmenu", "shipselect", "soundtrack", "paradise", "story", "cutscene", "dialogue", "shop"].includes(gameState)) return;
   isPaused = !isPaused;
   btnPause.textContent = isPaused ? "Resume" : "Pause";
 };
 
 btnRestart.onclick = () => {
-  // After Paradise, treat Restart as Endless mode start
   if (gameState === "paradise") {
     endlessMode = true;
+    gameMode = "endless";
     currentLevel = 1;
     resetGame();
-    gameState = "endless";
-    if (musicOn) sounds.music.play();
+    gameState = "play";
+    playMusic();
   } else {
     endlessMode = false;
-    startGame(true);
+    gameMode = "story";
+    startNewRun();
   }
 };
 
@@ -280,25 +374,26 @@ btnExit.onclick = () => alert("Exit requested.");
 btnMusic.onclick = () => {
   musicOn = !musicOn;
   btnMusic.textContent = musicOn ? "Music: On" : "Music: Off";
-  if (musicOn) sounds.music.play();
-  else sounds.music.pause();
+  if (musicOn) playMusic();
+  else music.pause();
 };
 
 volumeSlider.oninput = () => {
   const vol = parseFloat(volumeSlider.value);
-  sounds.music.volume = vol;
+  music.volume = vol;
   sounds.laser.volume = vol;
   sounds.explosion.volume = vol;
   sounds.bossLaser.volume = vol;
+  sounds.shopBuy.volume = vol;
+  sounds.menuMove.volume = vol;
+  sounds.menuSelect.volume = vol;
 };
 
 controlModeSelect.onchange = () => {
   controlMode = controlModeSelect.value;
 };
 
-/* ============================================
-   SECTION 8: TOUCH CONTROLS & JOYSTICK GRAPHICS
-   ============================================ */
+/* ========== SECTION 7: TOUCH CONTROLS & JOYSTICK ========== */
 const touchMove = document.getElementById("touch-move");
 const touchFire = document.getElementById("touch-fire");
 
@@ -347,51 +442,25 @@ touchMove.addEventListener("touchend", () => {
 touchFire.addEventListener("touchstart", e => {
   if (controlMode !== "touch") return;
   e.preventDefault();
-  if (gameState === "title") {
-    startGame(true);
-  } else if (gameState === "story") {
-    advanceStory();
-  } else if (gameState === "cutscene") {
-    skipCutscene();
-  } else if (gameState === "dialogue") {
-    endDialogueAndSpawnBoss();
-  } else if (gameState === "paradise") {
-    // tap fire on Paradise -> endless mode
-    endlessMode = true;
-    currentLevel = 1;
-    resetGame();
-    gameState = "endless";
-  } else {
-    tryShoot();
-  }
+  handlePrimaryAction();
 }, { passive: false });
 
-/* ============================================
-   SECTION 9: KEYBOARD & GAMEPAD
-   ============================================ */
+/* ========== SECTION 8: KEYBOARD & GAMEPAD ========== */
 const keys = {};
 window.addEventListener("keydown", e => {
   keys[e.code] = true;
-  if (gameState === "title" && (e.code === "Space" || e.code === "Enter")) {
-    startGame(true);
-  } else if (gameState === "story" && (e.code === "Space" || e.code === "Enter")) {
-    advanceStory();
-  } else if (gameState === "cutscene" && (e.code === "Space" || e.code === "Enter")) {
-    skipCutscene();
-  } else if (gameState === "dialogue" && (e.code === "Space" || e.code === "Enter")) {
-    endDialogueAndSpawnBoss();
-  } else if (gameState === "paradise" && (e.code === "Space" || e.code === "Enter")) {
-    endlessMode = true;
-    currentLevel = 1;
-    resetGame();
-    gameState = "endless";
+  if (e.code === "Space" || e.code === "Enter") {
+    handlePrimaryAction();
+  }
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
+    handleMenuNavigation(e.code);
   }
 });
 window.addEventListener("keyup", e => keys[e.code] = false);
 
 function handleKeyboard(dt) {
   if (controlMode !== "keyboard") return;
-  if (!["play", "boss", "endless"].includes(gameState)) return;
+  if (!["play", "boss", "bossrush", "endless"].includes(gameState)) return;
 
   moveInput.x = 0;
   moveInput.y = 0;
@@ -413,12 +482,10 @@ function handleKeyboard(dt) {
 }
 
 let gamepadIndex = null;
-
 window.addEventListener("gamepadconnected", e => {
   gamepadIndex = e.gamepad.index;
   gamepadStatus.textContent = "Connected";
 });
-
 window.addEventListener("gamepaddisconnected", () => {
   gamepadIndex = null;
   gamepadStatus.textContent = "Not connected";
@@ -426,7 +493,7 @@ window.addEventListener("gamepaddisconnected", () => {
 
 function handleGamepad(dt) {
   if (controlMode !== "gamepad") return;
-  if (!["play", "boss", "endless"].includes(gameState)) return;
+  if (!["play", "boss", "bossrush", "endless"].includes(gameState)) return;
   if (gamepadIndex === null) return;
 
   const gp = navigator.getGamepads()[gamepadIndex];
@@ -449,63 +516,174 @@ function handleGamepad(dt) {
   }
 }
 
-/* ============================================
-   SECTION 10: CORE GAME FLOW
-   ============================================ */
-function startGame(fromTitle) {
-  resetGame();
-  if (fromTitle) {
+/* ========== SECTION 9: CORE FLOW & MODES ========== */
+let mainMenuIndex = 0;
+const mainMenuItems = [
+  { id: "story", label: "Story Mode" },
+  { id: "bossrush", label: "Boss Rush" },
+  { id: "endless", label: "Endless Mode" },
+  { id: "ngplus", label: "New Game+" },
+  { id: "shipselect", label: "Ship Select" },
+  { id: "soundtrack", label: "Soundtrack" }
+];
+
+let shipSelectIndex = 0;
+let soundtrackIndex = 0;
+
+function handlePrimaryAction() {
+  if (gameState === "title") {
+    gameState = "mainmenu";
+    sounds.menuSelect.play();
+  } else if (gameState === "mainmenu") {
+    selectMainMenuItem();
+  } else if (gameState === "shipselect") {
+    confirmShipSelection();
+  } else if (gameState === "soundtrack") {
+    confirmSoundtrackSelection();
+  } else if (gameState === "story") {
+    advanceStory();
+  } else if (gameState === "cutscene") {
+    skipCutscene();
+  } else if (gameState === "dialogue") {
+    endDialogueAndSpawnBoss();
+  } else if (gameState === "shop") {
+    // could add confirm buy with touch; for now, no-op
+  } else if (gameState === "paradise") {
+    endlessMode = true;
+    gameMode = "endless";
     currentLevel = 1;
-    currentStoryIndex = 0;
-    endlessMode = false;
-    gameState = "story";
-  } else {
+    resetGame();
     gameState = "play";
+    playMusic();
+  } else if (["play", "boss", "bossrush", "endless"].includes(gameState)) {
+    tryShoot();
   }
-  if (musicOn) sounds.music.play();
 }
 
-function resetGame() {
-  const w = canvas.width / window.devicePixelRatio;
-  const h = canvas.height / window.devicePixelRatio;
-
-  player.x = w / 2;
-  player.y = h * 0.75;
-  player.vx = 0;
-  player.vy = 0;
-  player.angle = -Math.PI / 2;
-  player.alive = true;
-  player.shield = 0;
-  player.weaponLevel = 1;
-
-  bullets = [];
-  enemies = [];
-  bossBullets = [];
-  explosions = [];
-  powerups = [];
-  bosses = [null, null, null, null, null];
-  currentBossIndex = -1;
-  miniBoss = null;
-
-  score = endlessMode ? score : 0;
-  lives = 3;
-  enemySpawnTimer = 0;
-  bulletCooldown = 0;
-  bulletCooldownBase = 0.2;
-  warpTime = 0;
-  landingTime = 0;
-  killsThisLevel = 0;
-  miniBossSpawned = false;
-  moveInput.x = 0;
-  moveInput.y = 0;
-  shakeTime = 0;
-  shakeIntensity = 0;
-
-  isPaused = false;
-  btnPause.textContent = "Pause";
-  initStars();
+function handleMenuNavigation(code) {
+  if (gameState === "mainmenu") {
+    if (code === "ArrowUp") {
+      mainMenuIndex = (mainMenuIndex - 1 + mainMenuItems.length) % mainMenuItems.length;
+      sounds.menuMove.play();
+    } else if (code === "ArrowDown") {
+      mainMenuIndex = (mainMenuIndex + 1) % mainMenuItems.length;
+      sounds.menuMove.play();
+    }
+  } else if (gameState === "shipselect") {
+    if (code === "ArrowUp") {
+      shipSelectIndex = (shipSelectIndex - 1 + ships.length) % ships.length;
+      sounds.menuMove.play();
+    } else if (code === "ArrowDown") {
+      shipSelectIndex = (shipSelectIndex + 1) % ships.length;
+      sounds.menuMove.play();
+    }
+  } else if (gameState === "soundtrack") {
+    if (code === "ArrowUp") {
+      soundtrackIndex = (soundtrackIndex - 1 + musicTracks.length) % musicTracks.length;
+      sounds.menuMove.play();
+    } else if (code === "ArrowDown") {
+      soundtrackIndex = (soundtrackIndex + 1) % musicTracks.length;
+      sounds.menuMove.play();
+    }
+  }
 }
 
+function selectMainMenuItem() {
+  const item = mainMenuItems[mainMenuIndex];
+  sounds.menuSelect.play();
+  if (item.id === "story") {
+    gameMode = "story";
+    endlessMode = false;
+    newGamePlus = false;
+    startNewRun();
+  } else if (item.id === "bossrush") {
+    gameMode = "bossrush";
+    endlessMode = false;
+    newGamePlus = false;
+    startBossRush();
+  } else if (item.id === "endless") {
+    gameMode = "endless";
+    endlessMode = true;
+    newGamePlus = false;
+    startEndless();
+  } else if (item.id === "ngplus") {
+    if (!achievements.ngPlusUnlock) {
+      // locked
+      return;
+    }
+    gameMode = "ngplus";
+    endlessMode = false;
+    newGamePlus = true;
+    startNewRun();
+  } else if (item.id === "shipselect") {
+    gameState = "shipselect";
+    shipSelectIndex = selectedShipIndex;
+  } else if (item.id === "soundtrack") {
+    gameState = "soundtrack";
+    soundtrackIndex = currentMusicIndex;
+  }
+}
+
+function confirmShipSelection() {
+  const ship = ships[shipSelectIndex];
+  if (!ship.unlocked) return;
+  selectedShipIndex = shipSelectIndex;
+  applySelectedShip();
+  sounds.menuSelect.play();
+  gameState = "mainmenu";
+}
+
+function confirmSoundtrackSelection() {
+  currentMusicIndex = soundtrackIndex;
+  music.pause();
+  music = new Audio(musicTracks[currentMusicIndex].src);
+  music.loop = true;
+  music.volume = volumeSlider ? parseFloat(volumeSlider.value) : 0.5;
+  if (musicOn) playMusic();
+  sounds.menuSelect.play();
+  gameState = "mainmenu";
+}
+
+function applySelectedShip() {
+  const ship = ships[selectedShipIndex];
+  player.speed = ship.speed;
+  player.weaponLevel = ship.baseWeaponLevel;
+  player.shield = ship.baseShield;
+  player.img = IMAGES[ship.imgKey];
+}
+
+function startNewRun() {
+  currentLevel = 1;
+  currentStoryIndex = 0;
+  endlessMode = false;
+  resetGame();
+  gameState = "story";
+  playMusic();
+}
+
+function startEndless() {
+  currentLevel = 1;
+  resetGame();
+  gameState = "play";
+  playMusic();
+}
+
+function startBossRush() {
+  resetGame();
+  gameState = "bossrush";
+  currentBossIndex = 0;
+  spawnBossForLevel(1);
+  playMusic();
+}
+
+/* ========== SECTION 10: MUSIC CONTROL ========== */
+function playMusic() {
+  if (!musicOn) return;
+  music.currentTime = 0;
+  music.play().catch(() => {});
+}
+
+/* ========== SECTION 11: STORY, CUTSCENE, DIALOGUE ========== */
 function advanceStory() {
   currentStoryIndex++;
   if (currentStoryIndex >= storyScreens.length) {
@@ -525,12 +703,12 @@ function skipCutscene() {
     gameState = "warp";
     warpTime = 0;
   } else {
-    gameState = "play";
+    gameState = "shop";
+    setupShop();
   }
   currentCutscene = null;
 }
 
-/* dialogue before boss */
 function startBossDialogue(level) {
   currentDialogue = {
     level,
@@ -545,28 +723,121 @@ function endDialogueAndSpawnBoss() {
   spawnBossForLevel(level);
 }
 
-/* ============================================
-   SECTION 11: SHOOTING, ENEMIES, BOSSES, POWERUPS
-   ============================================ */
+/* ========== SECTION 12: SHOP BETWEEN LEVELS ========== */
+let shopItems = [];
+let shopIndex = 0;
+
+function setupShop() {
+  shopItems = [
+    { id: "weapon", label: "Weapon Upgrade", cost: 500, desc: "Increase weapon level." },
+    { id: "shield", label: "Shield +1", cost: 300, desc: "Gain one shield point." },
+    { id: "life", label: "Extra Life", cost: 800, desc: "Gain one extra life." },
+    { id: "rapid", label: "Rapid Fire", cost: 400, desc: "Temporary fire rate boost." },
+    { id: "drop", label: "Lucky Charm", cost: 600, desc: "More power-up drops." }
+  ];
+  shopIndex = 0;
+}
+
+function buyShopItem() {
+  const item = shopItems[shopIndex];
+  if (!item) return;
+  if (credits < item.cost) return;
+  credits -= item.cost;
+  sounds.shopBuy.play();
+
+  if (item.id === "weapon") {
+    player.weaponLevel = Math.min(player.weaponLevel + 1, 5);
+  } else if (item.id === "shield") {
+    player.shield = Math.min(player.shield + 1, 5);
+  } else if (item.id === "life") {
+    lives += 1;
+  } else if (item.id === "rapid") {
+    bulletCooldownBase = 0.08;
+    setTimeout(() => {
+      bulletCooldownBase = 0.2;
+    }, 8000);
+  } else if (item.id === "drop") {
+    // simple flag: more drops
+    extraDropChance = 0.2;
+    setTimeout(() => {
+      extraDropChance = 0;
+    }, 15000);
+  }
+}
+
+let extraDropChance = 0;
+
+/* ========== SECTION 13: SHOOTING, ENEMIES, FORMATIONS, BOSSES ========== */
+function resetGame() {
+  const w = canvas.width / window.devicePixelRatio;
+  const h = canvas.height / window.devicePixelRatio;
+
+  player.x = w / 2;
+  player.y = h * 0.75;
+  player.vx = 0;
+  player.vy = 0;
+  player.alive = true;
+
+  applySelectedShip();
+  if (newGamePlus) {
+    player.shield = Math.max(player.shield, 1);
+  }
+
+  bullets = [];
+  enemies = [];
+  bossBullets = [];
+  explosions = [];
+  powerups = [];
+  bosses = [null, null, null, null, null];
+  currentBossIndex = -1;
+  miniBoss = null;
+
+  if (!endlessMode && gameMode !== "bossrush") {
+    score = 0;
+    credits = 0;
+  }
+
+  lives = 3;
+  enemySpawnTimer = 0;
+  formationTimer = 2;
+  bulletCooldown = 0;
+  bulletCooldownBase = 0.2;
+  warpTime = 0;
+  landingTime = 0;
+  killsThisLevel = 0;
+  miniBossSpawned = false;
+  moveInput.x = 0;
+  moveInput.y = 0;
+  shakeTime = 0;
+  shakeIntensity = 0;
+
+  isPaused = false;
+  btnPause.textContent = "Pause";
+  initStars();
+}
+
 function tryShoot() {
   if (!player.alive) return;
-  if (!["play", "boss", "endless"].includes(gameState)) return;
+  if (!["play", "boss", "bossrush", "endless"].includes(gameState)) return;
   if (bulletCooldown > 0) return;
 
   const speed = 400;
   const patterns = [];
-  if (player.weaponLevel === 1) {
+  const wl = player.weaponLevel;
+  if (wl === 1) {
     patterns.push(0);
-  } else if (player.weaponLevel === 2) {
+  } else if (wl === 2) {
     patterns.push(-0.1, 0.1);
-  } else if (player.weaponLevel === 3) {
+  } else if (wl === 3) {
     patterns.push(-0.15, 0, 0.15);
-  } else if (player.weaponLevel >= 4) {
+  } else if (wl === 4) {
     patterns.push(-0.2, -0.07, 0.07, 0.2);
+  } else if (wl >= 5) {
+    patterns.push(-0.25, -0.12, 0, 0.12, 0.25);
   }
 
   for (const offset of patterns) {
-    const angle = -Math.PI / 2 + offset; // always shoot up
+    const angle = -Math.PI / 2 + offset;
     const dx = Math.cos(angle);
     const dy = Math.sin(angle);
     bullets.push({
@@ -583,36 +854,110 @@ function tryShoot() {
   sounds.laser.play();
 }
 
-function spawnEnemy() {
+function spawnEnemy(typeOverride) {
   const cfg = levelConfigs.find(l => l.id === currentLevel) || levelConfigs[0];
   const types = ["triangle", "crab", "ufo"];
-  const type = types[Math.floor(Math.random() * types.length)];
+  const type = typeOverride || types[Math.floor(Math.random() * types.length)];
   const w = canvas.width / window.devicePixelRatio;
   const x = 40 + Math.random() * (w - 80);
   const y = -40;
-  const baseSpeed = 40 + Math.random() * 60;
+  let baseSpeed = 40 + Math.random() * 60;
+
+  let hp = 1;
+  if (type === "crab") hp = 2;
+  if (type === "ufo") hp = 3;
+
+  let speedMult = cfg.enemySpeed || 1;
+  if (newGamePlus) speedMult *= 1.3;
 
   enemies.push({
     type,
     x,
     y,
-    vy: baseSpeed * (cfg.enemySpeed || 1),
+    vy: baseSpeed * speedMult,
     radius: 20,
-    hp: 1
+    hp
   });
+}
+
+/* enemy formations */
+function spawnFormation(type) {
+  const w = canvas.width / window.devicePixelRatio;
+  const cfg = levelConfigs.find(l => l.id === currentLevel) || levelConfigs[0];
+  let speedMult = cfg.enemySpeed || 1;
+  if (newGamePlus) speedMult *= 1.3;
+
+  if (type === "v") {
+    const centerX = w / 2;
+    const baseY = -40;
+    for (let i = -2; i <= 2; i++) {
+      enemies.push({
+        type: "triangle",
+        x: centerX + i * 40,
+        y: baseY - Math.abs(i) * 20,
+        vy: 60 * speedMult,
+        radius: 20,
+        hp: 1
+      });
+    }
+  } else if (type === "sine") {
+    const count = 6;
+    for (let i = 0; i < count; i++) {
+      enemies.push({
+        type: "ufo",
+        x: (w / (count + 1)) * (i + 1),
+        y: -60 - i * 20,
+        vy: 50 * speedMult,
+        radius: 22,
+        hp: 3,
+        sinePhase: Math.random() * Math.PI * 2
+      });
+    }
+  } else if (type === "circle") {
+    const centerX = w / 2;
+    const centerY = -80;
+    const count = 8;
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count;
+      enemies.push({
+        type: "crab",
+        x: centerX + Math.cos(angle) * 60,
+        y: centerY + Math.sin(angle) * 60,
+        vy: 40 * speedMult,
+        radius: 20,
+        hp: 2
+      });
+    }
+  } else if (type === "diagonal") {
+    const fromLeft = Math.random() < 0.5;
+    const startX = fromLeft ? -40 : w + 40;
+    const dir = fromLeft ? 1 : -1;
+    for (let i = 0; i < 6; i++) {
+      enemies.push({
+        type: "triangle",
+        x: startX + i * dir * 40,
+        y: -40 - i * 20,
+        vy: 70 * speedMult,
+        radius: 18,
+        hp: 1
+      });
+    }
+  }
 }
 
 function spawnMiniBoss(level) {
   const w = canvas.width / window.devicePixelRatio;
   const hpBase = 20 + level * 10;
+  let hp = hpBase;
+  if (newGamePlus) hp = Math.floor(hp * 1.5);
   miniBoss = {
     level,
     x: w / 2,
     y: 80,
     vx: 60 + level * 10,
     radius: 40,
-    hp: hpBase,
-    maxHp: hpBase,
+    hp,
+    maxHp: hp,
     fireCooldown: 0.8,
     img: IMAGES["boss" + Math.max(1, level - 1)]
   };
@@ -632,23 +977,25 @@ function spawnPowerup(x, y) {
 
 function applyPowerup(p) {
   if (p.type === "shield") {
-    player.shield = Math.min(player.shield + 1, 3);
+    player.shield = Math.min(player.shield + 1, 5);
   } else if (p.type === "score") {
     score += 500;
+    credits += 100;
   } else if (p.type === "rapid") {
     bulletCooldownBase = 0.08;
     setTimeout(() => {
       bulletCooldownBase = 0.2;
     }, 8000);
   } else if (p.type === "weapon") {
-    player.weaponLevel = Math.min(player.weaponLevel + 1, 4);
+    player.weaponLevel = Math.min(player.weaponLevel + 1, 5);
   }
 }
 
 function spawnBossForLevel(level) {
   const w = canvas.width / window.devicePixelRatio;
   const imgKey = "boss" + level;
-  const hpBase = 80 + (level - 1) * 30;
+  let hpBase = 80 + (level - 1) * 30;
+  if (newGamePlus) hpBase = Math.floor(hpBase * 1.6);
   const radius = 60 + (level - 1) * 5;
 
   const boss = {
@@ -666,16 +1013,14 @@ function spawnBossForLevel(level) {
   };
   bosses[level - 1] = boss;
   currentBossIndex = level - 1;
-  gameState = "boss";
+  gameState = (gameMode === "bossrush") ? "bossrush" : "boss";
 }
 
 function bossFirePattern(boss, dt) {
   boss.patternTime += dt;
   const speedBase = 220 + boss.level * 30;
 
-  // unique patterns per level
   if (boss.level === 1) {
-    // aimed shots at player
     const angle = Math.atan2(player.y - boss.y, player.x - boss.x);
     const speed = speedBase;
     bossBullets.push({
@@ -686,7 +1031,6 @@ function bossFirePattern(boss, dt) {
       radius: 6
     });
   } else if (boss.level === 2) {
-    // horizontal wave
     const count = 8;
     for (let i = 0; i < count; i++) {
       const offsetX = -80 + (160 / (count - 1)) * i;
@@ -699,7 +1043,6 @@ function bossFirePattern(boss, dt) {
       });
     }
   } else if (boss.level === 3) {
-    // spiral
     const angle = boss.patternTime * 4;
     const speed = speedBase;
     bossBullets.push({
@@ -710,7 +1053,6 @@ function bossFirePattern(boss, dt) {
       radius: 6
     });
   } else if (boss.level === 4) {
-    // rotating ring
     const count = 12;
     const baseAngle = boss.patternTime * 2;
     for (let i = 0; i < count; i++) {
@@ -724,7 +1066,6 @@ function bossFirePattern(boss, dt) {
       });
     }
   } else if (boss.level === 5) {
-    // mixed: ring + aimed
     const count = 10;
     const baseAngle = boss.patternTime * 3;
     for (let i = 0; i < count; i++) {
@@ -768,11 +1109,9 @@ function miniBossFire(mini) {
   sounds.bossLaser.play();
 }
 
-/* ============================================
-   SECTION 12: UPDATE LOGIC (LEVELS, BOSSES, WARP, LANDING)
-   ============================================ */
+/* ========== SECTION 14: UPDATE LOGIC ========== */
 function update(dt) {
-  if (["play", "boss", "endless"].includes(gameState)) {
+  if (["play", "boss", "bossrush", "endless"].includes(gameState)) {
     updatePlay(dt);
   } else if (gameState === "warp") {
     updateWarp(dt);
@@ -784,6 +1123,10 @@ function update(dt) {
     updateStars(dt, 1);
   } else if (gameState === "dialogue") {
     updateStars(dt, 1);
+  } else if (gameState === "shop") {
+    updateStars(dt, 0.5);
+  } else if (gameState === "title" || gameState === "mainmenu" || gameState === "shipselect" || gameState === "soundtrack") {
+    updateStars(dt, 0.8);
   }
 }
 
@@ -797,12 +1140,10 @@ function updatePlay(dt) {
   const w = canvas.width / window.devicePixelRatio;
   const h = canvas.height / window.devicePixelRatio;
 
-  // steady movement
-  const speed = 260;
+  const speed = player.speed;
   player.x += moveInput.x * speed * dt;
   player.y += moveInput.y * speed * dt;
 
-  // clamp to screen
   const margin = 20;
   player.x = Math.max(margin, Math.min(w - margin, player.x));
   player.y = Math.max(margin, Math.min(h - margin, player.y));
@@ -818,16 +1159,30 @@ function updatePlay(dt) {
 
   if (gameState === "play" || gameState === "endless") {
     enemySpawnTimer -= dt;
-    const spawnRate = endlessMode ? 0.7 : (cfg.spawnRate || 1.2);
+    formationTimer -= dt;
+
+    let spawnRate = endlessMode ? 0.7 : (cfg.spawnRate || 1.2);
+    if (newGamePlus) spawnRate *= 0.8;
+
     if (enemySpawnTimer <= 0) {
       spawnEnemy();
       enemySpawnTimer = spawnRate;
     }
+
+    if (formationTimer <= 0) {
+      const formationTypes = ["v", "sine", "circle", "diagonal"];
+      const fType = formationTypes[Math.floor(Math.random() * formationTypes.length)];
+      spawnFormation(fType);
+      formationTimer = 6;
+    }
   }
 
   enemies = enemies.filter(e => {
+    if (e.sinePhase !== undefined) {
+      e.x += Math.sin(e.sinePhase + performance.now() / 400) * 0.5;
+    }
     e.y += e.vy * dt;
-    return e.y < h + 60;
+    return e.y < h + 80;
   });
 
   powerups = powerups.filter(p => {
@@ -835,7 +1190,6 @@ function updatePlay(dt) {
     return p.y < h + 60;
   });
 
-  // enemy vs bullets
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
     for (let j = bullets.length - 1; j >= 0; j--) {
@@ -848,17 +1202,17 @@ function updatePlay(dt) {
           enemies.splice(i, 1);
           addExplosion(e.x, e.y);
           score += 100;
+          credits += 20;
           killsThisLevel++;
-          if (Math.random() < 0.25) spawnPowerup(e.x, e.y);
+          let dropChance = 0.25 + extraDropChance;
+          if (Math.random() < dropChance) spawnPowerup(e.x, e.y);
 
-          // mini-boss at 5 kills (once per level)
-          if (!miniBossSpawned && killsThisLevel >= 5 && !miniBoss && !endlessMode) {
+          if (!miniBossSpawned && killsThisLevel >= 5 && !miniBoss && !endlessMode && gameMode !== "bossrush") {
             miniBossSpawned = true;
             spawnMiniBoss(currentLevel);
           }
 
-          // boss at 10 kills (primary trigger)
-          if (!endlessMode && killsThisLevel >= 10 && currentBossIndex < currentLevel - 1 && !bosses[currentLevel - 1] && !currentDialogue && miniBoss === null) {
+          if (!endlessMode && gameMode === "story" && killsThisLevel >= 10 && currentBossIndex < currentLevel - 1 && !bosses[currentLevel - 1] && !currentDialogue && miniBoss === null) {
             enemies = [];
             startBossDialogue(currentLevel);
           }
@@ -868,9 +1222,9 @@ function updatePlay(dt) {
     }
   }
 
-  // safety: ensure boss dialogue still triggers if conditions are met
   if (
     !endlessMode &&
+    gameMode === "story" &&
     killsThisLevel >= 10 &&
     !bosses[currentLevel - 1] &&
     currentBossIndex < 0 &&
@@ -881,7 +1235,6 @@ function updatePlay(dt) {
     startBossDialogue(currentLevel);
   }
 
-  // powerups vs player
   for (let i = powerups.length - 1; i >= 0; i--) {
     const p = powerups[i];
     if (circleHit(p.x, p.y, p.radius, player.x, player.y, player.radius)) {
@@ -890,7 +1243,6 @@ function updatePlay(dt) {
     }
   }
 
-  // enemies vs player
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
     if (circleHit(e.x, e.y, e.radius, player.x, player.y, player.radius)) {
@@ -910,17 +1262,14 @@ function updatePlay(dt) {
     }
   }
 
-  // mini-boss update (guard against null)
   if (miniBoss !== null) {
     updateMiniBoss(dt, miniBoss);
   }
 
-  // main boss update
-  if (gameState === "boss" && currentBossIndex >= 0) {
+  if ((gameState === "boss" || gameState === "bossrush") && currentBossIndex >= 0) {
     updateBoss(dt, bosses[currentBossIndex]);
   }
 
-  // boss bullets
   bossBullets = bossBullets.filter(bb => {
     bb.x += bb.vx * dt;
     bb.y += bb.vy * dt;
@@ -959,7 +1308,6 @@ function updateMiniBoss(dt, mini) {
     mini.fireCooldown = 1.2;
   }
 
-  // bullets vs mini-boss
   for (let j = bullets.length - 1; j >= 0; j--) {
     const b = bullets[j];
     if (circleHit(mini.x, mini.y, mini.radius, b.x, b.y, b.radius)) {
@@ -967,17 +1315,16 @@ function updateMiniBoss(dt, mini) {
       mini.hp -= 1;
       addExplosion(b.x, b.y);
       score += 15;
+      credits += 5;
       if (mini.hp <= 0) {
         addExplosion(mini.x, mini.y);
         triggerShake(0.5, 10);
-        miniBoss = null;          // remove mini-boss
-        // miniBossSpawned stays true so it won't respawn this level
+        miniBoss = null;
       }
       break;
     }
   }
 
-  // mini-boss vs player
   if (circleHit(mini.x, mini.y, mini.radius, player.x, player.y, player.radius)) {
     addExplosion(player.x, player.y);
     triggerShake(0.5, 10);
@@ -1014,6 +1361,7 @@ function updateBoss(dt, boss) {
       addExplosion(b.x, b.y);
       triggerShake(0.3, 6);
       score += 20;
+      credits += 10;
       if (boss.hp <= 0) {
         addExplosion(boss.x, boss.y);
         triggerShake(0.7, 12);
@@ -1022,7 +1370,16 @@ function updateBoss(dt, boss) {
         currentBossIndex = -1;
         unlockAchievement("bossSlayer" + boss.level, "Boss Slayer " + boss.level);
 
-        if (!endlessMode) {
+        if (gameMode === "bossrush") {
+          if (boss.level === 5) {
+            unlockAchievement("bossRushClear", "Boss Rush Clear");
+            gameState = "gameover";
+            handleHighScore();
+          } else {
+            const nextLevel = boss.level + 1;
+            spawnBossForLevel(nextLevel);
+          }
+        } else if (!endlessMode) {
           currentLevel++;
           killsThisLevel = 0;
           miniBossSpawned = false;
@@ -1034,7 +1391,7 @@ function updateBoss(dt, boss) {
             startCutscene("afterBoss5");
           }
         } else {
-          // endless: could scale difficulty here
+          // endless: could scale difficulty further
         }
       }
       break;
@@ -1072,6 +1429,9 @@ function updateLanding(dt) {
   if (landingTime > 2) {
     gameState = "paradise";
     unlockAchievement("paradiseFound", "Paradise Found");
+    unlockAchievement("ngPlusUnlock", "New Game+ Unlocked");
+    ships[1].unlocked = true; // Phantom
+    ships[2].unlocked = true; // Titan
   }
 }
 
@@ -1084,9 +1444,7 @@ function updateCutscene(dt) {
   }
 }
 
-/* ============================================
-   SECTION 13: COLLISION, EXPLOSIONS, SHAKE, HIGH SCORE
-   ============================================ */
+/* ========== SECTION 15: COLLISION, EXPLOSIONS, SHAKE, SCORE ========== */
 function circleHit(x1, y1, r1, x2, y2, r2) {
   const dx = x1 - x2;
   const dy = y1 - y2;
@@ -1128,9 +1486,7 @@ function updateShake(dt) {
   }
 }
 
-/* ============================================
-   SECTION 14: DRAWING (NEON EFFECTS, HUD, SCENES)
-   ============================================ */
+/* ========== SECTION 16: DRAWING ========== */
 function applyCameraShake() {
   if (shakeTime > 0 && shakeIntensity > 0) {
     const dx = (Math.random() - 0.5) * shakeIntensity;
@@ -1141,15 +1497,14 @@ function applyCameraShake() {
 
 function drawPlayer() {
   if (!player.alive) return;
-  if (!IMAGES.player.complete) return;
+  if (!player.img || !player.img.complete) return;
 
   ctx.save();
   ctx.translate(player.x, player.y);
-
   ctx.globalCompositeOperation = "lighter";
   ctx.shadowBlur = 25;
   ctx.shadowColor = "#00ffff";
-  ctx.drawImage(IMAGES.player, -32, -32, 64, 64);
+  ctx.drawImage(player.img, -32, -32, 64, 64);
 
   if (player.shield > 0) {
     ctx.strokeStyle = "rgba(0, 255, 255, 0.8)";
@@ -1205,7 +1560,7 @@ function drawBossSprite(boss) {
   if (!boss || !boss.img || !boss.img.complete) return;
   ctx.save();
   ctx.translate(boss.x, boss.y);
-  ctx.rotate(Math.PI); // assume PNG faces down
+  ctx.rotate(Math.PI);
   ctx.globalCompositeOperation = "lighter";
   ctx.shadowBlur = 30;
   ctx.shadowColor = "#ff0044";
@@ -1332,11 +1687,13 @@ function drawHUD() {
 
   ctx.fillText(`Score: ${score}`, 16, 24);
   ctx.fillText(`High: ${highScore}`, 16, 44);
-  ctx.fillText(`Lives: ${lives}`, 16, 64);
-  ctx.fillText(`Shield: ${player.shield}`, 16, 84);
-  ctx.fillText(`Weapon: ${player.weaponLevel}`, 16, 104);
-  ctx.fillText(`Level: ${endlessMode ? "Endless" : currentLevel}`, 16, 124);
-  ctx.fillText(`Kills: ${killsThisLevel}/10`, 16, 144);
+  ctx.fillText(`Credits: ${credits}`, 16, 64);
+  ctx.fillText(`Lives: ${lives}`, 16, 84);
+  ctx.fillText(`Shield: ${player.shield}`, 16, 104);
+  ctx.fillText(`Weapon: ${player.weaponLevel}`, 16, 124);
+  ctx.fillText(`Level: ${endlessMode ? "Endless" : currentLevel}`, 16, 144);
+  ctx.fillText(`Kills: ${killsThisLevel}/10`, 16, 164);
+  ctx.fillText(`Mode: ${gameMode.toUpperCase()}`, 16, 184);
 
   if (gameState === "gameover") {
     ctx.font = "24px system-ui";
@@ -1348,7 +1705,6 @@ function drawHUD() {
   }
 
   ctx.restore();
-
   drawAchievementPopups();
 }
 
@@ -1393,11 +1749,31 @@ function drawBackground() {
   drawStars();
 }
 
-function drawTitleScreen() {
+/* title animation */
+let titleAnimTime = 0;
+function drawTitleScreen(dt) {
+  titleAnimTime += dt || 0;
   const w = canvas.width / window.devicePixelRatio;
   const h = canvas.height / window.devicePixelRatio;
 
-  drawBackground();
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const gridSpacing = 40;
+  ctx.save();
+  ctx.strokeStyle = "rgba(0,255,255,0.2)";
+  ctx.lineWidth = 1;
+  ctx.globalCompositeOperation = "lighter";
+  const offset = (titleAnimTime * 40) % gridSpacing;
+  for (let y = h / 2; y < h + gridSpacing; y += gridSpacing) {
+    ctx.beginPath();
+    ctx.moveTo(0, y + offset);
+    ctx.lineTo(w, y + offset);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  drawStars(1.2);
 
   ctx.save();
   ctx.textAlign = "center";
@@ -1411,11 +1787,117 @@ function drawTitleScreen() {
   ctx.font = "16px system-ui";
   ctx.shadowColor = "#ff00ff";
   ctx.fillStyle = "#ffffff";
-  ctx.fillText("Tap Fire / Press Space to Start", w / 2, h / 2 + 10);
+  ctx.fillText("Press Fire / Space to Start", w / 2, h / 2 + 10);
 
   ctx.font = "14px system-ui";
   ctx.fillText(`High Score: ${highScore}`, w / 2, h / 2 + 40);
 
+  ctx.restore();
+}
+
+function drawMainMenu() {
+  const w = canvas.width / window.devicePixelRatio;
+  const h = canvas.height / window.devicePixelRatio;
+
+  drawBackground();
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.font = "22px system-ui";
+  ctx.shadowBlur = 20;
+  ctx.shadowColor = "#00ffff";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText("Main Menu", w / 2, 80);
+
+  ctx.font = "16px system-ui";
+  for (let i = 0; i < mainMenuItems.length; i++) {
+    const item = mainMenuItems[i];
+    const y = 140 + i * 28;
+    if (i === mainMenuIndex) {
+      ctx.fillStyle = "#00ffff";
+      ctx.fillText("> " + item.label + " <", w / 2, y);
+    } else {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(item.label, w / 2, y);
+    }
+  }
+
+  ctx.font = "12px system-ui";
+  ctx.fillStyle = "#aaaaaa";
+  ctx.fillText("Use Arrow Keys / Touch Fire to select", w / 2, h - 40);
+  ctx.restore();
+}
+
+function drawShipSelect() {
+  const w = canvas.width / window.devicePixelRatio;
+  const h = canvas.height / window.devicePixelRatio;
+
+  drawBackground();
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.font = "20px system-ui";
+  ctx.shadowBlur = 20;
+  ctx.shadowColor = "#00ffff";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText("Ship Select", w / 2, 80);
+
+  ctx.font = "16px system-ui";
+  for (let i = 0; i < ships.length; i++) {
+    const ship = ships[i];
+    const y = 140 + i * 26;
+    let label = ship.name;
+    if (!ship.unlocked) label += " (Locked)";
+    if (i === shipSelectIndex) {
+      ctx.fillStyle = "#00ffff";
+      ctx.fillText("> " + label + " <", w / 2, y);
+    } else {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(label, w / 2, y);
+    }
+  }
+
+  const ship = ships[shipSelectIndex];
+  ctx.font = "14px system-ui";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(ship.desc, w / 2, h - 80);
+
+  ctx.font = "12px system-ui";
+  ctx.fillStyle = "#aaaaaa";
+  ctx.fillText("Press Fire / Enter to confirm", w / 2, h - 40);
+  ctx.restore();
+}
+
+function drawSoundtrackMenu() {
+  const w = canvas.width / window.devicePixelRatio;
+  const h = canvas.height / window.devicePixelRatio;
+
+  drawBackground();
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.font = "20px system-ui";
+  ctx.shadowBlur = 20;
+  ctx.shadowColor = "#00ffff";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText("Soundtrack Selector", w / 2, 80);
+
+  ctx.font = "16px system-ui";
+  for (let i = 0; i < musicTracks.length; i++) {
+    const track = musicTracks[i];
+    const y = 140 + i * 26;
+    if (i === soundtrackIndex) {
+      ctx.fillStyle = "#00ffff";
+      ctx.fillText("> " + track.label + " <", w / 2, y);
+    } else {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(track.label, w / 2, y);
+    }
+  }
+
+  ctx.font = "12px system-ui";
+  ctx.fillStyle = "#aaaaaa";
+  ctx.fillText("Press Fire / Enter to confirm", w / 2, h - 40);
   ctx.restore();
 }
 
@@ -1578,6 +2060,46 @@ function drawParadise() {
   ctx.restore();
 }
 
+function drawShop() {
+  const w = canvas.width / window.devicePixelRatio;
+  const h = canvas.height / window.devicePixelRatio;
+
+  drawBackground();
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.font = "20px system-ui";
+  ctx.shadowBlur = 20;
+  ctx.shadowColor = "#00ffff";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText("Shop", w / 2, 80);
+
+  ctx.font = "16px system-ui";
+  for (let i = 0; i < shopItems.length; i++) {
+    const item = shopItems[i];
+    const y = 140 + i * 26;
+    const label = `${item.label} - ${item.cost}C`;
+    if (i === shopIndex) {
+      ctx.fillStyle = "#00ffff";
+      ctx.fillText("> " + label + " <", w / 2, y);
+    } else {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(label, w / 2, y);
+    }
+  }
+
+  const item = shopItems[shopIndex];
+  ctx.font = "14px system-ui";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(item.desc, w / 2, h - 80);
+
+  ctx.font = "12px system-ui";
+  ctx.fillStyle = "#aaaaaa";
+  ctx.fillText("Credits: " + credits, w / 2, h - 60);
+  ctx.fillText("Press Fire to buy, Space to continue", w / 2, h - 40);
+  ctx.restore();
+}
+
 function drawJoystickOverlay() {
   const rect = touchMove.getBoundingClientRect();
   const cx = rect.left + rect.width / 2;
@@ -1608,9 +2130,7 @@ function drawJoystickOverlay() {
   ctx.globalCompositeOperation = "source-over";
 }
 
-/* ============================================
-   SECTION 15: STARS UPDATE
-   ============================================ */
+/* ========== SECTION 17: STARS UPDATE ========== */
 function updateStars(dt, speedMultiplier) {
   const w = canvas.width / window.devicePixelRatio;
   const h = canvas.height / window.devicePixelRatio;
@@ -1624,9 +2144,7 @@ function updateStars(dt, speedMultiplier) {
   }
 }
 
-/* ============================================
-   SECTION 16: MAIN GAME LOOP
-   ============================================ */
+/* ========== SECTION 18: MAIN LOOP ========== */
 let lastTime = performance.now();
 
 function gameLoop(t) {
@@ -1644,19 +2162,27 @@ function gameLoop(t) {
 
   if (gameState === "title") {
     updateStars(dt, 1);
-    drawTitleScreen();
+    drawTitleScreen(dt);
+  } else if (gameState === "mainmenu") {
+    drawMainMenu();
+  } else if (gameState === "shipselect") {
+    drawShipSelect();
+  } else if (gameState === "soundtrack") {
+    drawSoundtrackMenu();
   } else if (gameState === "story") {
     drawStoryScreen();
   } else if (gameState === "dialogue") {
     drawDialogue();
   } else if (gameState === "cutscene") {
     drawCutscene();
-  } else if (["play", "boss", "endless", "gameover"].includes(gameState)) {
+  } else if (gameState === "shop") {
+    drawShop();
+  } else if (["play", "boss", "bossrush", "endless", "gameover"].includes(gameState)) {
     drawBackground();
     drawPlayer();
     drawEnemies();
     if (miniBoss !== null) drawMiniBossSprite(miniBoss);
-    if (gameState === "boss" && currentBossIndex >= 0) {
+    if ((gameState === "boss" || gameState === "bossrush") && currentBossIndex >= 0) {
       drawBossSprite(bosses[currentBossIndex]);
     }
     drawBullets();
@@ -1682,3 +2208,21 @@ function gameLoop(t) {
 }
 
 requestAnimationFrame(gameLoop);
+
+/* ========== SECTION 19: EXTRA INPUT FOR SHOP (KEYBOARD) ========== */
+window.addEventListener("keydown", e => {
+  if (gameState === "shop") {
+    if (e.code === "ArrowUp") {
+      shopIndex = (shopIndex - 1 + shopItems.length) % shopItems.length;
+      sounds.menuMove.play();
+    } else if (e.code === "ArrowDown") {
+      shopIndex = (shopIndex + 1) % shopItems.length;
+      sounds.menuMove.play();
+    } else if (e.code === "Space") {
+      // continue to next level
+      gameState = "play";
+    } else if (e.code === "Enter") {
+      buyShopItem();
+    }
+  }
+});
