@@ -753,7 +753,7 @@ function updateBoss(dt, boss) {
       addExplosion(b.x, b.y);
       score += 20;
       if (boss.hp <= 0) {
-        addExplosion(boss.x, boss.y);
+        addExplosion(boss.x, b.y);
         const idx = boss.level - 1;
         bosses[idx] = null;
         currentBossIndex = -1;
