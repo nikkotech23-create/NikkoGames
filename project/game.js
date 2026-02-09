@@ -11,6 +11,18 @@ function resizeCanvas() {
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
+// ====== IMAGE ASSETS ======
+const IMAGES = {
+  player: new Image(),
+  enemyTriangle: new Image(),
+  enemyCrab: new Image(),
+  enemyUfo: new Image()
+};
+
+IMAGES.player.src = "assets/ships/player_ship.png";
+IMAGES.enemyTriangle.src = "assets/ships/enemy_triangle.png";
+IMAGES.enemyCrab.src = "assets/ships/enemy_crab.png";
+IMAGES.enemyUfo.src = "assets/ships/enemy_ufo.png";
 // ====== GAME STATE ======
 let isPaused = false;
 let musicOn = true;
@@ -140,23 +152,9 @@ function handleGamepad(dt) {
 
 // ====== DRAWING ======
 function drawPlayer() {
-  ctx.save();
-  ctx.translate(player.x, player.y);
-  ctx.strokeStyle = "rgba(0, 255, 255, 0.9)";
-  ctx.lineWidth = 2;
-  ctx.shadowBlur = 15;
-  ctx.shadowColor = "#00ffff";
-
-  ctx.beginPath();
-  ctx.moveTo(0, -16);
-  ctx.lineTo(12, 12);
-  ctx.lineTo(-12, 12);
-  ctx.closePath();
-  ctx.stroke();
-
-  ctx.restore();
+  if (!IMAGES.player.complete) return; // Wait until loaded
+  ctx.drawImage(IMAGES.player, player.x - 32, player.y - 32, 64, 64);
 }
-
 function drawBackground() {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -167,8 +165,38 @@ function drawBackground() {
   }
 }
 
+function drawEnemyTriangle(x, y) {
+  ctx.drawImage(IMAGES.enemyTriangle, x - 24, y - 24, 48, 48);
+}
+
+function drawEnemyCrab(x, y) {
+  ctx.drawImage(IMAGES.enemyCrab, x - 24, y - 24, 48, 48);
+}
+
+function drawEnemyUfo(x, y) {
+  ctx.drawImage(IMAGES.enemyUfo, x - 24, y - 24, 48, 48);
+}
+
+let enemies = [
+  { type: "triangle", x: 200, y: 100 },
+  { type: "crab", x: 300, y: 150 },
+  { type: "ufo", x: 100, y: 200 }
+];
+
 // ====== GAME LOOP ======
 let lastTime = performance.now();
+
+function drawEnemies() {
+  for (const e of enemies) {
+    if (e.type === "triangle") drawEnemyTriangle(e.x, e.y);
+    if (e.type === "crab") drawEnemyCrab(e.x, e.y);
+    if (e.type === "ufo") drawEnemyUfo(e.x, e.y);
+  }
+}
+
+drawBackground();
+drawPlayer();
+drawEnemies();
 
 function gameLoop(t) {
   const dt = (t - lastTime) / 1000;
