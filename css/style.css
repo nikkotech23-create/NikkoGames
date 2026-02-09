@@ -14,13 +14,88 @@
   --shadow-soft: 0 12px 30px rgba(0, 0, 0, 0.4);
 }
 
+/* Neon buttons */
+button,
+.answer-btn {
+  border: 2px solid #ff00ff;
+  background: #120018;
+  color: #fff;
+  text-shadow: 0 0 6px #ff00ff;
+  box-shadow: 0 0 10px #ff00ff55;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+button:hover,
+.answer-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 18px #ff00ffaa;
+}
+
+/* Progress bar */
+#progress-wrapper {
+  width: 80%;
+  max-width: 500px;
+  height: 12px;
+  border-radius: 999px;
+  border: 2px solid #00e5ff;
+  margin: 10px auto 20px;
+  overflow: hidden;
+  box-shadow: 0 0 12px #00e5ff88;
+}
+
+#progress-bar {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #00e5ff, #ff00ff);
+  box-shadow: 0 0 16px #00e5ff;
+  transition: width 0.25s ease-out;
+}
+
+/* Victory banner */
+#victory-banner {
+  position: fixed;
+  top: 15%;
+  left: 50%;
+  transform: translateX(-50%) scale(0.8);
+  padding: 20px 40px;
+  background: rgba(10, 0, 25, 0.95);
+  border: 3px solid #ffdd00;
+  color: #ffdd00;
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  text-shadow: 0 0 10px #ffdd00, 0 0 20px #ff8800;
+  box-shadow: 0 0 25px #ffdd00aa;
+  border-radius: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  z-index: 9999;
+}
+
+#victory-banner.show {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+/* Perfect score pulse */
+#victory-banner.perfect {
+  animation: perfectPulse 1.2s infinite alternate;
+}
+
+@keyframes perfectPulse {
+  0% { box-shadow: 0 0 20px #ffdd00aa; }
+  100% { box-shadow: 0 0 40px #ffffffdd; }
+}
+
+/* Balloons (from earlier) */
 #balloons {
   position: fixed;
   bottom: 0;
   left: 0;
   width: 100%;
   pointer-events: none;
-  z-index: 9999;
+  z-index: 9998;
 }
 
 .balloon {
