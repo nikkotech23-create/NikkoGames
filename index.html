@@ -14,8 +14,12 @@
         <span id="current-category-label">Select a category</span>
         <span>Score: <strong id="score">0</strong></span>
         <span>Best: <strong id="best-score">0</strong></span>
+        <button id="restartBtn" style="display:none;">Restart Quiz</button>
       </div>
     </header>
+<!-- Balloon container -->
+<div id="balloons"></div>
+
 
     <!-- Category selection screen -->
     <main id="screen-categories" class="screen active">
@@ -92,9 +96,11 @@
   <audio id="sound-wrong" src="sounds/wrong.mp3" preload="auto"></audio>
   <audio id="sound-victory" src="sounds/victory.mp3" preload="auto"></audio>
 
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
  <script src="js/game.js?v=2"></script>
 </body>
 </html>
+
 
 
 
