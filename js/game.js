@@ -111,13 +111,16 @@ const questions = {
   ]
 };
 
-// ====== STATE ======
-
+// =========================
+//  STATE
+// =========================
 let currentCategory = null;
 let currentIndex = 0;
 let currentScore = 0;
 
-// DOM references
+// =========================
+//  DOM REFERENCES
+// =========================
 const screenCategories = document.getElementById("screen-categories");
 const screenQuiz = document.getElementById("screen-quiz");
 const screenResult = document.getElementById("screen-result");
@@ -137,9 +140,221 @@ const backToMenuBtn = document.getElementById("back-to-menu");
 const playAgainBtn = document.getElementById("play-again");
 const chooseAnotherBtn = document.getElementById("choose-another");
 
+const restartBtn = document.getElementById("restartBtn");
+const balloonContainer = document.getElementById("balloons");
+const progressBar = document.getElementById("progress-bar");
+const victoryBanner = document.getElementById("victory-banner");
 
-// ====== EVENT LISTENERS ======
+// =========================
+//  SOUNDS
+// =========================
+const soundClick = document.getElementById("sound-click");
+const soundCorrect = document.getElementById("sound-correct");
+const soundWrong = document.getElementById("sound-wrong");
+const soundVictory = document.getElementById("sound-victory");
 
+// =========================
+//  UTILITIES
+// =========================
+function playSound(audioEl) {
+  if (!audioEl) return;
+  audioEl.currentTime = 0;
+  audioEl.play().catch(() => {});
+}
+
+function setBodyCategoryClass(cat) {
+  document.body.className = cat ? cat : "";
+}
+
+function getBestScoreKey(cat) {
+  return `nikko_best_${cat}`;
+}
+
+function getBestScore(cat) {
+  const val = localStorage.getItem(getBestScoreKey(cat));
+  return val ? parseInt(val, 10) : 0;
+}
+
+function setBestScore(cat, score) {
+  const currentBest = getBestScore(cat);
+  if (score > currentBest) {
+    localStorage.setItem(getBestScoreKey(cat), String(score));
+  }
+}
+
+function formatCategoryName(cat) {
+  return cat.charAt(0).toUpperCase() + cat.slice(1);
+}
+
+// =========================
+//  SCREEN MANAGEMENT
+// =========================
+function showScreen(name) {
+  screenCategories.classList.remove("active");
+  screenQuiz.classList.remove("active");
+  screenResult.classList.remove("active");
+
+  if (name === "categories") screenCategories.classList.add("active");
+  if (name === "quiz") screenQuiz.classList.add("active");
+  if (name === "result") screenResult.classList.add("active");
+}
+
+// =========================
+//  PROGRESS BAR
+// =========================
+function updateProgress() {
+  const total = questions[currentCategory].length;
+  const percent = (currentIndex / total) * 100;
+  progressBar.style.width = `${percent}%`;
+}
+
+// =========================
+//  START CATEGORY
+// =========================
+function startCategory(cat) {
+  currentCategory = cat;
+  currentIndex = 0;
+  currentScore = 0;
+
+  scoreSpan.textContent = currentScore;
+  currentCategoryLabel.textContent = `Category: ${formatCategoryName(cat)}`;
+  bestScoreSpan.textContent = getBestScore(cat);
+
+  setBodyCategoryClass(cat);
+  showScreen("quiz");
+
+  updateProgress();
+  loadQuestion();
+}
+
+// =========================
+//  LOAD QUESTION
+// =========================
+function loadQuestion() {
+  const list = questions[currentCategory];
+  const item = list[currentIndex];
+
+  questionText.textContent = item.q;
+  questionCounter.textContent = `${currentIndex + 1} / ${list.length}`;
+
+  optionsContainer.innerHTML = "";
+  item.o.forEach((opt) => {
+    const btn = document.createElement("button");
+    btn.className = "answer-btn neon";
+    btn.textContent = opt;
+
+    btn.onclick = () => handleAnswer(opt, item.a);
+    optionsContainer.appendChild(btn);
+  });
+}
+
+// =========================
+//  HANDLE ANSWER
+// =========================
+function handleAnswer(selected, correct) {
+  playSound(soundClick);
+
+  if (selected === correct) {
+    currentScore++;
+    scoreSpan.textContent = currentScore;
+    playSound(soundCorrect);
+  } else {
+    playSound(soundWrong);
+  }
+
+  currentIndex++;
+  updateProgress();
+
+  if (currentIndex >= questions[currentCategory].length) {
+    endQuiz();
+  } else {
+    loadQuestion();
+  }
+}
+
+// =========================
+//  END QUIZ (CONFETTI + BALLOONS + BANNER)
+// =========================
+function endQuiz() {
+  showScreen("result");
+
+  finalScoreSpan.textContent = currentScore;
+  finalBestScoreSpan.textContent = getBestScore(currentCategory);
+
+  const total = questions[currentCategory].length;
+  const isPerfect = currentScore === total;
+
+  setBestScore(currentCategory, currentScore);
+  playSound(soundVictory);
+
+  // Confetti
+  confetti({ particleCount: 180, spread: 110, origin: { y: 0.6 } });
+  setTimeout(() => {
+    confetti({ particleCount: 120, spread: 80, origin: { y: 0.2 } });
+  }, 400);
+
+  // Balloons
+  launchBalloons();
+
+  // Victory banner
+  victoryBanner.classList.add("show");
+  victoryBanner.classList.toggle("perfect", isPerfect);
+  victoryBanner.textContent = isPerfect ? "PERFECT SCORE!" : "VICTORY!";
+
+  if (isPerfect) {
+    setTimeout(() => {
+      confetti({
+        particleCount: 220,
+        spread: 140,
+        origin: { y: 0.7 },
+        colors: ["#ffffff", "#ffdd00", "#ff00ff"]
+      });
+    }, 600);
+  }
+
+  restartBtn.style.display = "block";
+}
+
+// =========================
+//  BALLOONS
+// =========================
+function launchBalloons() {
+  balloonContainer.innerHTML = "";
+
+  for (let i = 0; i < 12; i++) {
+    const balloon = document.createElement("div");
+    balloon.classList.add("balloon");
+
+    balloon.style.backgroundColor = `hsl(${Math.random() * 360}, 80%, 60%)`;
+    balloon.style.left = Math.random() * 100 + "vw";
+    balloon.style.animationDuration = 4 + Math.random() * 3 + "s";
+
+    balloonContainer.appendChild(balloon);
+  }
+}
+
+// =========================
+//  RESTART QUIZ
+// =========================
+restartBtn.addEventListener("click", () => {
+  playSound(soundClick);
+
+  restartBtn.style.display = "none";
+  balloonContainer.innerHTML = "";
+  victoryBanner.classList.remove("show", "perfect");
+
+  currentIndex = 0;
+  currentScore = 0;
+  scoreSpan.textContent = currentScore;
+
+  updateProgress();
+  showScreen("quiz");
+  loadQuestion();
+});
+
+// =========================
+//  EVENT LISTENERS
+// =========================
 document.querySelectorAll(".category-card").forEach((card) => {
   card.addEventListener("click", () => {
     const cat = card.getAttribute("data-category");
@@ -171,8 +386,9 @@ chooseAnotherBtn.addEventListener("click", () => {
   showScreen("categories");
 });
 
-// ====== INIT ======
-
+// =========================
+//  INIT
+// =========================
 (function init() {
   setBodyCategoryClass(null);
   showScreen("categories");
