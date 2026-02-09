@@ -1,4 +1,3 @@
-
 /* ============================================
    SECTION 0: CANVAS & BASIC SETUP
    ============================================ */
@@ -21,7 +20,12 @@ const IMAGES = {
   player: new Image(),
   enemyTriangle: new Image(),
   enemyCrab: new Image(),
-  enemyUfo: new Image()
+  enemyUfo: new Image(),
+  boss1: new Image(),
+  boss2: new Image(),
+  boss3: new Image(),
+  boss4: new Image(),
+  boss5: new Image()
 };
 
 IMAGES.player.src = "assets/ships/player_ship.png";
@@ -29,10 +33,17 @@ IMAGES.enemyTriangle.src = "assets/ships/enemy_triangle.png";
 IMAGES.enemyCrab.src = "assets/ships/enemy_crab.png";
 IMAGES.enemyUfo.src = "assets/ships/enemy_ufo.png";
 
+IMAGES.boss1.src = "assets/bosses/boss1.png";
+IMAGES.boss2.src = "assets/bosses/boss2.png";
+IMAGES.boss3.src = "assets/bosses/boss3.png";
+IMAGES.boss4.src = "assets/bosses/boss4.png";
+IMAGES.boss5.src = "assets/bosses/boss5.png";
+
 const sounds = {
   music: new Audio("assets/audio/music_bg.mp3"),
   laser: new Audio("assets/audio/laser.wav"),
-  explosion: new Audio("assets/audio/explosion.wav")
+  explosion: new Audio("assets/audio/explosion.wav"),
+  bossLaser: new Audio("assets/audio/boss_laser.wav")
 };
 sounds.music.loop = true;
 sounds.music.volume = 0.5;
@@ -40,8 +51,8 @@ sounds.music.volume = 0.5;
 /* ============================================
    SECTION 2: GLOBAL GAME STATE
    ============================================ */
-let gameState = "title"; 
-// title | story | cutscene | play | boss1 | boss2 | warp | landing | paradise | gameover
+let gameState = "title";
+// title | story | cutscene | play | boss | warp | landing | paradise | gameover
 
 let isPaused = false;
 let musicOn = true;
@@ -66,8 +77,10 @@ let bulletCooldownBase = 0.2;
 let enemies = [];
 let enemySpawnTimer = 0;
 
-let boss1 = null;
-let boss2 = null;
+let bosses = [null, null, null, null, null]; // index 0..4
+let currentBossIndex = -1;
+
+let bossBullets = [];
 
 let explosions = [];
 let powerups = [];
@@ -87,29 +100,27 @@ let landingTime = 0;
    SECTION 3: LEVELS, STORY, CUTSCENES
    ============================================ */
 const levelConfigs = [
-  { id: 1, spawnRate: 1.2, enemySpeed: 1, scoreToAdvance: 200 },
-  { id: 2, spawnRate: 1.0, enemySpeed: 1.2, scoreToAdvance: 400 },
-  { id: 3, spawnRate: 0.8, enemySpeed: 1.4, scoreToAdvance: 600 },
-  { id: 4, boss: "boss1" },
-  { id: 5, warp: true },
-  { id: 6, boss: "boss2" },
-  { id: 7, paradise: true }
+  { id: 1, spawnRate: 1.2, enemySpeed: 1, scoreToBoss: 200 },
+  { id: 2, spawnRate: 1.0, enemySpeed: 1.2, scoreToBoss: 400 },
+  { id: 3, spawnRate: 0.9, enemySpeed: 1.4, scoreToBoss: 600 },
+  { id: 4, spawnRate: 0.8, enemySpeed: 1.6, scoreToBoss: 800 },
+  { id: 5, spawnRate: 0.7, enemySpeed: 1.8, scoreToBoss: 1000 }
 ];
 
 const storyScreens = [
   "You leave the ruins of the Outer Belt...",
   "The Nebula of Echoes hums with forgotten wars...",
   "Beyond the Rift, a new threat awakens...",
-  "The first guardian of Paradise stands in your way...",
-  "Warping through the fabric of starlight...",
-  "The final guardian awaits beyond the void...",
-  "Paradise is within reach..."
+  "The guardians of Paradise grow stronger...",
+  "The final path to Paradise opens..."
 ];
 
 const cutscenes = {
-  intro: { type: "intro", time: 0, duration: 3 },
-  boss1Arrival: { type: "boss1Arrival", time: 0, duration: 3 },
-  boss2Arrival: { type: "boss2Arrival", time: 0, duration: 3 }
+  afterBoss1: { type: "afterBoss1", time: 0, duration: 3 },
+  afterBoss2: { type: "afterBoss2", time: 0, duration: 3 },
+  afterBoss3: { type: "afterBoss3", time: 0, duration: 3 },
+  afterBoss4: { type: "afterBoss4", time: 0, duration: 3 },
+  afterBoss5: { type: "afterBoss5", time: 0, duration: 3 }
 };
 
 /* ============================================
@@ -188,9 +199,11 @@ try {
    ============================================ */
 const achievements = {
   firstBlood: false,
-  untouchable: false,
   bossSlayer1: false,
   bossSlayer2: false,
+  bossSlayer3: false,
+  bossSlayer4: false,
+  bossSlayer5: false,
   paradiseFound: false
 };
 let achievementPopups = [];
@@ -218,7 +231,7 @@ loadAchievements();
    SECTION 7: BUTTON HANDLERS
    ============================================ */
 btnPause.onclick = () => {
-  if (gameState === "title" || gameState === "paradise" || gameState === "story" || gameState === "cutscene") return;
+  if (["title", "paradise", "story", "cutscene"].includes(gameState)) return;
   isPaused = !isPaused;
   btnPause.textContent = isPaused ? "Resume" : "Pause";
 };
@@ -244,6 +257,7 @@ volumeSlider.oninput = () => {
   sounds.music.volume = vol;
   sounds.laser.volume = vol;
   sounds.explosion.volume = vol;
+  sounds.bossLaser.volume = vol;
 };
 
 controlModeSelect.onchange = () => {
@@ -281,7 +295,7 @@ touchMove.addEventListener("touchmove", e => {
   const dy = pos.y - touchMoveCenter.y;
   touchMoveOffset = { x: dx, y: dy };
 
-  if (gameState === "play" || gameState === "boss1" || gameState === "boss2") {
+  if (["play", "boss"].includes(gameState)) {
     player.angle = Math.atan2(dy, dx) + Math.PI / 2;
     const strength = Math.min(Math.hypot(dx, dy) / 40, 1);
     const thrust = 200 * strength;
@@ -327,7 +341,7 @@ window.addEventListener("keyup", e => keys[e.code] = false);
 
 function handleKeyboard(dt) {
   if (controlMode !== "keyboard") return;
-  if (!(gameState === "play" || gameState === "boss1" || gameState === "boss2")) return;
+  if (!["play", "boss"].includes(gameState)) return;
 
   const rotSpeed = 3;
   const thrust = 250;
@@ -357,7 +371,7 @@ window.addEventListener("gamepaddisconnected", () => {
 
 function handleGamepad(dt) {
   if (controlMode !== "gamepad") return;
-  if (!(gameState === "play" || gameState === "boss1" || gameState === "boss2")) return;
+  if (!["play", "boss"].includes(gameState)) return;
   if (gamepadIndex === null) return;
 
   const gp = navigator.getGamepads()[gamepadIndex];
@@ -408,10 +422,11 @@ function resetGame() {
 
   bullets = [];
   enemies = [];
+  bossBullets = [];
   explosions = [];
   powerups = [];
-  boss1 = null;
-  boss2 = null;
+  bosses = [null, null, null, null, null];
+  currentBossIndex = -1;
 
   score = 0;
   lives = 3;
@@ -440,14 +455,11 @@ function startCutscene(name) {
 }
 function skipCutscene() {
   if (!currentCutscene) return;
-  if (currentCutscene.type === "intro") {
+  if (currentCutscene.type === "afterBoss5") {
+    gameState = "warp";
+    warpTime = 0;
+  } else {
     gameState = "play";
-  } else if (currentCutscene.type === "boss1Arrival") {
-    spawnBoss1();
-    gameState = "boss1";
-  } else if (currentCutscene.type === "boss2Arrival") {
-    spawnBoss2();
-    gameState = "boss2";
   }
   currentCutscene = null;
 }
@@ -457,7 +469,7 @@ function skipCutscene() {
    ============================================ */
 function tryShoot() {
   if (!player.alive) return;
-  if (!(gameState === "play" || gameState === "boss1" || gameState === "boss2")) return;
+  if (!["play", "boss"].includes(gameState)) return;
   if (bulletCooldown > 0) return;
 
   const speed = 400;
@@ -536,34 +548,53 @@ function applyPowerup(p) {
   }
 }
 
-function spawnBoss1() {
+function spawnBossForLevel(level) {
   const w = canvas.width / window.devicePixelRatio;
-  boss1 = {
+  const imgKey = "boss" + level;
+  const hpBase = 60 + (level - 1) * 20;
+  const radius = 60 + (level - 1) * 5;
+
+  const boss = {
+    level,
     x: w / 2,
     y: 120,
-    vx: 60,
-    radius: 60,
-    hp: 60,
-    maxHp: 60
+    vx: 50 + level * 10,
+    radius,
+    hp: hpBase,
+    maxHp: hpBase,
+    fireCooldown: 0,
+    fireRate: 1.2 - level * 0.1,
+    img: IMAGES[imgKey]
   };
+  bosses[level - 1] = boss;
+  currentBossIndex = level - 1;
+  gameState = "boss";
 }
-function spawnBoss2() {
-  const w = canvas.width / window.devicePixelRatio;
-  boss2 = {
-    x: w / 2,
-    y: 120,
-    vx: 80,
-    radius: 70,
-    hp: 90,
-    maxHp: 90
-  };
+
+function bossFire(boss) {
+  const speed = 220 + boss.level * 30;
+  const patternCount = 6 + boss.level * 2;
+  for (let i = 0; i < patternCount; i++) {
+    const angle = (Math.PI * 2 * i) / patternCount;
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    bossBullets.push({
+      x: boss.x,
+      y: boss.y,
+      vx: dx * speed,
+      vy: dy * speed,
+      radius: 6
+    });
+  }
+  sounds.bossLaser.currentTime = 0;
+  sounds.bossLaser.play();
 }
 
 /* ============================================
    SECTION 12: UPDATE LOGIC (LEVELS, BOSSES, WARP, LANDING)
    ============================================ */
 function update(dt) {
-  if (gameState === "play" || gameState === "boss1" || gameState === "boss2") {
+  if (["play", "boss"].includes(gameState)) {
     updatePlay(dt);
   } else if (gameState === "warp") {
     updateWarp(dt);
@@ -601,11 +632,12 @@ function updatePlay(dt) {
   bullets = bullets.filter(b => {
     b.x += b.vx * dt;
     b.y += b.vy * dt;
-    return b.x > -20 && b.x < w + 20 && b.y > -20 && b.y < h + 20;
+    return b.x > -40 && b.x < w + 40 && b.y > -40 && b.y < h + 40;
   });
 
   const cfg = levelConfigs.find(l => l.id === currentLevel) || levelConfigs[0];
-  if (!cfg.boss && !cfg.warp && !cfg.paradise) {
+
+  if (gameState === "play") {
     enemySpawnTimer -= dt;
     if (enemySpawnTimer <= 0) {
       spawnEnemy();
@@ -668,110 +700,76 @@ function updatePlay(dt) {
     }
   }
 
-  if (currentLevel === 4 && !boss1) {
-    spawnBoss1();
-    gameState = "boss1";
-  }
-  if (currentLevel === 6 && !boss2) {
-    spawnBoss2();
-    gameState = "boss2";
+  if (gameState === "play" && score >= cfg.scoreToBoss && currentBossIndex < currentLevel - 1) {
+    enemies = [];
+    spawnBossForLevel(currentLevel);
   }
 
-  if (gameState === "boss1" && boss1) updateBoss1(dt);
-  if (gameState === "boss2" && boss2) updateBoss2(dt);
-
-  if (currentLevel === 5 && gameState !== "warp") {
-    gameState = "warp";
-    warpTime = 0;
+  if (gameState === "boss" && currentBossIndex >= 0) {
+    updateBoss(dt, bosses[currentBossIndex]);
   }
 
-  if (currentLevel === 7 && gameState !== "landing") {
-    gameState = "landing";
-    landingTime = 0;
-  }
+  bossBullets = bossBullets.filter(bb => {
+    bb.x += bb.vx * dt;
+    bb.y += bb.vy * dt;
+    const inside = bb.x > -40 && bb.x < w + 40 && bb.y > -40 && bb.y < h + 40;
+    if (inside && circleHit(bb.x, bb.y, bb.radius, player.x, player.y, player.radius)) {
+      addExplosion(player.x, player.y);
+      if (player.shield > 0) {
+        player.shield -= 1;
+      } else {
+        lives -= 1;
+        if (lives <= 0) {
+          player.alive = false;
+          gameState = "gameover";
+          handleHighScore();
+        }
+      }
+      return false;
+    }
+    return inside;
+  });
 
   updateStars(dt, 1);
-
-  if (!cfg.boss && !cfg.warp && !cfg.paradise && score >= cfg.scoreToAdvance) {
-    currentLevel++;
-    currentStoryIndex = Math.min(currentStoryIndex + 1, storyScreens.length - 1);
-    const nextCfg = levelConfigs.find(l => l.id === currentLevel);
-    if (nextCfg && nextCfg.boss === "boss1") {
-      startCutscene("boss1Arrival");
-    } else if (nextCfg && nextCfg.boss === "boss2") {
-      startCutscene("boss2Arrival");
-    } else if (nextCfg && nextCfg.warp) {
-      gameState = "warp";
-      warpTime = 0;
-    } else if (nextCfg && nextCfg.paradise) {
-      gameState = "landing";
-      landingTime = 0;
-    } else {
-      gameState = "story";
-    }
-  }
 }
 
-function updateBoss1(dt) {
+function updateBoss(dt, boss) {
   const w = canvas.width / window.devicePixelRatio;
-  boss1.x += boss1.vx * dt;
-  if (boss1.x < 80 || boss1.x > w - 80) boss1.vx *= -1;
+
+  boss.x += boss.vx * dt;
+  if (boss.x < 80 || boss.x > w - 80) boss.vx *= -1;
+
+  boss.fireCooldown -= dt;
+  if (boss.fireCooldown <= 0) {
+    bossFire(boss);
+    boss.fireCooldown = Math.max(0.4, boss.fireRate);
+  }
 
   for (let j = bullets.length - 1; j >= 0; j--) {
     const b = bullets[j];
-    if (circleHit(boss1.x, boss1.y, boss1.radius, b.x, b.y, b.radius)) {
+    if (circleHit(boss.x, boss.y, boss.radius, b.x, b.y, b.radius)) {
       bullets.splice(j, 1);
-      boss1.hp -= 1;
+      boss.hp -= 1;
       addExplosion(b.x, b.y);
       score += 20;
-      if (boss1.hp <= 0) {
-        addExplosion(boss1.x, boss1.y);
-        boss1 = null;
-        unlockAchievement("bossSlayer1", "Boss Slayer I");
+      if (boss.hp <= 0) {
+        addExplosion(boss.x, boss.y);
+        const idx = boss.level - 1;
+        bosses[idx] = null;
+        currentBossIndex = -1;
+        unlockAchievement("bossSlayer" + boss.level, "Boss Slayer " + boss.level);
         currentLevel++;
-        gameState = "story";
+        if (currentLevel <= 5) {
+          startCutscene("afterBoss" + boss.level);
+        } else {
+          startCutscene("afterBoss5");
+        }
       }
+      break;
     }
   }
 
-  if (boss1 && circleHit(boss1.x, boss1.y, boss1.radius, player.x, player.y, player.radius)) {
-    addExplosion(player.x, player.y);
-    if (player.shield > 0) {
-      player.shield -= 1;
-    } else {
-      lives -= 1;
-      if (lives <= 0) {
-        player.alive = false;
-        gameState = "gameover";
-        handleHighScore();
-      }
-    }
-  }
-}
-
-function updateBoss2(dt) {
-  const w = canvas.width / window.devicePixelRatio;
-  boss2.x += boss2.vx * dt;
-  if (boss2.x < 80 || boss2.x > w - 80) boss2.vx *= -1;
-
-  for (let j = bullets.length - 1; j >= 0; j--) {
-    const b = bullets[j];
-    if (circleHit(boss2.x, boss2.y, boss2.radius, b.x, b.y, b.radius)) {
-      bullets.splice(j, 1);
-      boss2.hp -= 1;
-      addExplosion(b.x, b.y);
-      score += 30;
-      if (boss2.hp <= 0) {
-        addExplosion(boss2.x, boss2.y);
-        boss2 = null;
-        unlockAchievement("bossSlayer2", "Boss Slayer II");
-        gameState = "warp";
-        warpTime = 0;
-      }
-    }
-  }
-
-  if (boss2 && circleHit(boss2.x, boss2.y, boss2.radius, player.x, player.y, player.radius)) {
+  if (circleHit(boss.x, boss.y, boss.radius, player.x, player.y, player.radius)) {
     addExplosion(player.x, player.y);
     if (player.shield > 0) {
       player.shield -= 1;
@@ -789,7 +787,7 @@ function updateBoss2(dt) {
 function updateWarp(dt) {
   warpTime += dt;
   updateStars(dt, 6);
-  if (warpTime > 4) {
+  if (warpTime > 3) {
     gameState = "landing";
     landingTime = 0;
   }
@@ -908,18 +906,17 @@ function drawEnemies() {
   }
 }
 
-function drawBoss(boss, color) {
-  if (!boss) return;
+function drawBossSprite(boss) {
+  if (!boss || !boss.img || !boss.img.complete) return;
   ctx.save();
   ctx.translate(boss.x, boss.y);
+  // assume boss PNG faces DOWN, rotate 180 to face up
+  ctx.rotate(Math.PI);
   ctx.globalCompositeOperation = "lighter";
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 4;
   ctx.shadowBlur = 25;
-  ctx.shadowColor = color;
-  ctx.beginPath();
-  ctx.arc(0, 0, boss.radius, 0, Math.PI * 2);
-  ctx.stroke();
+  ctx.shadowColor = "#ff0044";
+  const size = boss.radius * 2;
+  ctx.drawImage(boss.img, -size / 2, -size / 2, size, size);
   ctx.restore();
   ctx.globalCompositeOperation = "source-over";
 
@@ -928,7 +925,7 @@ function drawBoss(boss, color) {
   ctx.fillStyle = "rgba(0,0,0,0.6)";
   ctx.fillRect(w / 2 - 120, 20, 240, 12);
   const ratio = boss.hp / boss.maxHp;
-  ctx.fillStyle = color;
+  ctx.fillStyle = "#ff0044";
   ctx.fillRect(w / 2 - 120, 20, 240 * ratio, 12);
   ctx.restore();
 }
@@ -940,6 +937,21 @@ function drawBullets() {
   ctx.shadowBlur = 10;
   ctx.shadowColor = "#00ffff";
   for (const b of bullets) {
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.globalCompositeOperation = "source-over";
+}
+
+function drawBossBullets() {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.fillStyle = "rgba(255, 0, 0, 0.9)";
+  ctx.shadowBlur = 15;
+  ctx.shadowColor = "#ff0000";
+  for (const b of bossBullets) {
     ctx.beginPath();
     ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
     ctx.fill();
@@ -1134,16 +1146,15 @@ function drawCutscene() {
   ctx.fillStyle = "#ffffff";
   ctx.font = "18px system-ui";
 
-  if (currentCutscene.type === "intro") {
-    const y = h * (0.8 - 0.3 * t);
-    ctx.fillText("Your journey begins...", w / 2, y);
-  } else if (currentCutscene.type === "boss1Arrival") {
-    const y = h * (0.2 + 0.3 * t);
-    ctx.fillText("A guardian emerges from the void...", w / 2, y);
-  } else if (currentCutscene.type === "boss2Arrival") {
-    const y = h * (0.2 + 0.3 * t);
-    ctx.fillText("The final guardian blocks your path...", w / 2, y);
-  }
+  let text = "";
+  if (currentCutscene.type === "afterBoss1") text = "The path to deeper space opens...";
+  else if (currentCutscene.type === "afterBoss2") text = "You pierce the Nebula of Echoes...";
+  else if (currentCutscene.type === "afterBoss3") text = "The guardians grow desperate...";
+  else if (currentCutscene.type === "afterBoss4") text = "Only one stands between you and Paradise...";
+  else if (currentCutscene.type === "afterBoss5") text = "Paradise awaits beyond the warp...";
+
+  const y = h * (0.5 - 0.1 * (1 - t));
+  ctx.fillText(text, w / 2, y);
 
   ctx.font = "14px system-ui";
   ctx.shadowColor = "#ff00ff";
@@ -1302,13 +1313,15 @@ function gameLoop(t) {
     drawStoryScreen();
   } else if (gameState === "cutscene") {
     drawCutscene();
-  } else if (gameState === "play" || gameState === "boss1" || gameState === "boss2" || gameState === "gameover") {
+  } else if (["play", "boss", "gameover"].includes(gameState)) {
     drawBackground();
     drawPlayer();
     drawEnemies();
-    if (gameState === "boss1" && boss1) drawBoss(boss1, "#ff00ff");
-    if (gameState === "boss2" && boss2) drawBoss(boss2, "#ffff00");
+    if (gameState === "boss" && currentBossIndex >= 0) {
+      drawBossSprite(bosses[currentBossIndex]);
+    }
     drawBullets();
+    drawBossBullets();
     drawPowerups();
     drawExplosions();
     drawHUD();
