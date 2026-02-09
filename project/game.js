@@ -1,3 +1,4 @@
+
 /* ============================================
    SECTION 0: CANVAS & BASIC SETUP
    ============================================ */
@@ -86,9 +87,9 @@ let landingTime = 0;
    SECTION 3: LEVELS, STORY, CUTSCENES
    ============================================ */
 const levelConfigs = [
-  { id: 1, spawnRate: 1.2, enemySpeed: 1, scoreToAdvance: 800 },
-  { id: 2, spawnRate: 1.0, enemySpeed: 1.2, scoreToAdvance: 1800 },
-  { id: 3, spawnRate: 0.8, enemySpeed: 1.4, scoreToAdvance: 2800 },
+  { id: 1, spawnRate: 1.2, enemySpeed: 1, scoreToAdvance: 200 },
+  { id: 2, spawnRate: 1.0, enemySpeed: 1.2, scoreToAdvance: 400 },
+  { id: 3, spawnRate: 0.8, enemySpeed: 1.4, scoreToAdvance: 600 },
   { id: 4, boss: "boss1" },
   { id: 5, warp: true },
   { id: 6, boss: "boss2" },
@@ -429,12 +430,7 @@ function advanceStory() {
   if (currentStoryIndex >= storyScreens.length) {
     gameState = "play";
   } else {
-    // between levels
-    if (currentLevel === 1 && currentStoryIndex === 1) gameState = "play";
-    else if (currentLevel === 2 && currentStoryIndex === 2) gameState = "play";
-    else if (currentLevel === 3 && currentStoryIndex === 3) gameState = "play";
-    else if (currentLevel === 4 && currentStoryIndex === 4) gameState = "warp";
-    else if (currentLevel === 6 && currentStoryIndex === 6) gameState = "landing";
+    gameState = "play";
   }
 }
 
@@ -447,8 +443,10 @@ function skipCutscene() {
   if (currentCutscene.type === "intro") {
     gameState = "play";
   } else if (currentCutscene.type === "boss1Arrival") {
+    spawnBoss1();
     gameState = "boss1";
   } else if (currentCutscene.type === "boss2Arrival") {
+    spawnBoss2();
     gameState = "boss2";
   }
   currentCutscene = null;
@@ -463,9 +461,6 @@ function tryShoot() {
   if (bulletCooldown > 0) return;
 
   const speed = 400;
-  const dirX = Math.cos(player.angle - Math.PI / 2);
-  const dirY = Math.sin(player.angle - Math.PI / 2);
-
   const patterns = [];
   if (player.weaponLevel === 1) {
     patterns.push(0);
@@ -673,8 +668,27 @@ function updatePlay(dt) {
     }
   }
 
+  if (currentLevel === 4 && !boss1) {
+    spawnBoss1();
+    gameState = "boss1";
+  }
+  if (currentLevel === 6 && !boss2) {
+    spawnBoss2();
+    gameState = "boss2";
+  }
+
   if (gameState === "boss1" && boss1) updateBoss1(dt);
   if (gameState === "boss2" && boss2) updateBoss2(dt);
+
+  if (currentLevel === 5 && gameState !== "warp") {
+    gameState = "warp";
+    warpTime = 0;
+  }
+
+  if (currentLevel === 7 && gameState !== "landing") {
+    gameState = "landing";
+    landingTime = 0;
+  }
 
   updateStars(dt, 1);
 
@@ -784,7 +798,7 @@ function updateWarp(dt) {
 function updateLanding(dt) {
   landingTime += dt;
   updateStars(dt, 0.5);
-  if (landingTime > 3) {
+  if (landingTime > 2) {
     gameState = "paradise";
     unlockAchievement("paradiseFound", "Paradise Found");
   }
