@@ -1,4 +1,3 @@
-
 /* ============================================
    SECTION 0: CANVAS & BASIC SETUP
    ============================================ */
@@ -260,8 +259,17 @@ btnPause.onclick = () => {
 };
 
 btnRestart.onclick = () => {
-  endlessMode = false;
-  startGame(true);
+  // After Paradise, treat Restart as Endless mode start
+  if (gameState === "paradise") {
+    endlessMode = true;
+    currentLevel = 1;
+    resetGame();
+    gameState = "endless";
+    if (musicOn) sounds.music.play();
+  } else {
+    endlessMode = false;
+    startGame(true);
+  }
 };
 
 btnOptions.onclick = () => optionsPanel.style.display = "block";
@@ -347,6 +355,12 @@ touchFire.addEventListener("touchstart", e => {
     skipCutscene();
   } else if (gameState === "dialogue") {
     endDialogueAndSpawnBoss();
+  } else if (gameState === "paradise") {
+    // tap fire on Paradise -> endless mode
+    endlessMode = true;
+    currentLevel = 1;
+    resetGame();
+    gameState = "endless";
   } else {
     tryShoot();
   }
@@ -366,6 +380,11 @@ window.addEventListener("keydown", e => {
     skipCutscene();
   } else if (gameState === "dialogue" && (e.code === "Space" || e.code === "Enter")) {
     endDialogueAndSpawnBoss();
+  } else if (gameState === "paradise" && (e.code === "Space" || e.code === "Enter")) {
+    endlessMode = true;
+    currentLevel = 1;
+    resetGame();
+    gameState = "endless";
   }
 });
 window.addEventListener("keyup", e => keys[e.code] = false);
@@ -468,7 +487,7 @@ function resetGame() {
   currentBossIndex = -1;
   miniBoss = null;
 
-  score = 0;
+  score = endlessMode ? score : 0;
   lives = 3;
   enemySpawnTimer = 0;
   bulletCooldown = 0;
@@ -832,14 +851,14 @@ function updatePlay(dt) {
           killsThisLevel++;
           if (Math.random() < 0.25) spawnPowerup(e.x, e.y);
 
-          // mini-boss at 5 kills
+          // mini-boss at 5 kills (once per level)
           if (!miniBossSpawned && killsThisLevel >= 5 && !miniBoss && !endlessMode) {
             miniBossSpawned = true;
             spawnMiniBoss(currentLevel);
           }
 
-          // boss at 10 kills
-          if (!endlessMode && killsThisLevel >= 10 && currentBossIndex < currentLevel - 1 && !bosses[currentLevel - 1]) {
+          // boss at 10 kills (primary trigger)
+          if (!endlessMode && killsThisLevel >= 10 && currentBossIndex < currentLevel - 1 && !bosses[currentLevel - 1] && !currentDialogue && miniBoss === null) {
             enemies = [];
             startBossDialogue(currentLevel);
           }
@@ -847,6 +866,19 @@ function updatePlay(dt) {
         break;
       }
     }
+  }
+
+  // safety: ensure boss dialogue still triggers if conditions are met
+  if (
+    !endlessMode &&
+    killsThisLevel >= 10 &&
+    !bosses[currentLevel - 1] &&
+    currentBossIndex < 0 &&
+    !currentDialogue &&
+    miniBoss === null
+  ) {
+    enemies = [];
+    startBossDialogue(currentLevel);
   }
 
   // powerups vs player
@@ -878,8 +910,8 @@ function updatePlay(dt) {
     }
   }
 
-  // mini-boss update
-  if (miniBoss) {
+  // mini-boss update (guard against null)
+  if (miniBoss !== null) {
     updateMiniBoss(dt, miniBoss);
   }
 
@@ -938,7 +970,8 @@ function updateMiniBoss(dt, mini) {
       if (mini.hp <= 0) {
         addExplosion(mini.x, mini.y);
         triggerShake(0.5, 10);
-        miniBoss = null;
+        miniBoss = null;          // remove mini-boss
+        // miniBossSpawned stays true so it won't respawn this level
       }
       break;
     }
@@ -1001,7 +1034,7 @@ function updateBoss(dt, boss) {
             startCutscene("afterBoss5");
           }
         } else {
-          // endless: just keep going, maybe increase difficulty
+          // endless: could scale difficulty here
         }
       }
       break;
@@ -1541,7 +1574,7 @@ function drawParadise() {
 
   ctx.font = "16px system-ui";
   ctx.fillText("You beat the game!", w / 2, h / 2 + 190);
-  ctx.fillText("Press Restart for Endless Mode", w / 2, h / 2 + 220);
+  ctx.fillText("Press Restart or Fire for Endless Mode", w / 2, h / 2 + 220);
   ctx.restore();
 }
 
@@ -1622,7 +1655,7 @@ function gameLoop(t) {
     drawBackground();
     drawPlayer();
     drawEnemies();
-    if (miniBoss) drawMiniBossSprite(miniBoss);
+    if (miniBoss !== null) drawMiniBossSprite(miniBoss);
     if (gameState === "boss" && currentBossIndex >= 0) {
       drawBossSprite(bosses[currentBossIndex]);
     }
