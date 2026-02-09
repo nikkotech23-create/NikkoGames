@@ -1,3 +1,4 @@
+
 /* ============================================
    SECTION 0: CANVAS & BASIC SETUP
    ============================================ */
@@ -52,7 +53,7 @@ sounds.music.volume = 0.5;
    SECTION 2: GLOBAL GAME STATE
    ============================================ */
 let gameState = "title";
-// title | story | cutscene | play | boss | warp | landing | paradise | gameover
+// title | story | dialogue | cutscene | play | boss | warp | landing | paradise | endless | gameover
 
 let isPaused = false;
 let musicOn = true;
@@ -70,6 +71,8 @@ let player = {
   weaponLevel: 1
 };
 
+let moveInput = { x: 0, y: 0 }; // steady directional movement
+
 let bullets = [];
 let bulletCooldown = 0;
 let bulletCooldownBase = 0.2;
@@ -79,6 +82,7 @@ let enemySpawnTimer = 0;
 
 let bosses = [null, null, null, null, null]; // index 0..4
 let currentBossIndex = -1;
+let miniBoss = null;
 
 let bossBullets = [];
 
@@ -96,15 +100,24 @@ let currentCutscene = null;
 let warpTime = 0;
 let landingTime = 0;
 
+let killsThisLevel = 0;
+let miniBossSpawned = false;
+
+let endlessMode = false;
+
+/* screen shake */
+let shakeTime = 0;
+let shakeIntensity = 0;
+
 /* ============================================
    SECTION 3: LEVELS, STORY, CUTSCENES
    ============================================ */
 const levelConfigs = [
-  { id: 1, spawnRate: 1.2, enemySpeed: 1, scoreToBoss: 200 },
-  { id: 2, spawnRate: 1.0, enemySpeed: 1.2, scoreToBoss: 400 },
-  { id: 3, spawnRate: 0.9, enemySpeed: 1.4, scoreToBoss: 600 },
-  { id: 4, spawnRate: 0.8, enemySpeed: 1.6, scoreToBoss: 800 },
-  { id: 5, spawnRate: 0.7, enemySpeed: 1.8, scoreToBoss: 1000 }
+  { id: 1, spawnRate: 1.2, enemySpeed: 1 },
+  { id: 2, spawnRate: 1.0, enemySpeed: 1.2 },
+  { id: 3, spawnRate: 0.9, enemySpeed: 1.4 },
+  { id: 4, spawnRate: 0.8, enemySpeed: 1.6 },
+  { id: 5, spawnRate: 0.7, enemySpeed: 1.8 }
 ];
 
 const storyScreens = [
@@ -122,6 +135,16 @@ const cutscenes = {
   afterBoss4: { type: "afterBoss4", time: 0, duration: 3 },
   afterBoss5: { type: "afterBoss5", time: 0, duration: 3 }
 };
+
+const bossDialogues = {
+  1: "Boss 1: You shall not pass the Outer Belt!",
+  2: "Boss 2: The Nebula of Echoes will be your grave.",
+  3: "Boss 3: Beyond the Rift, only void awaits you.",
+  4: "Boss 4: Paradise is not for mortals.",
+  5: "Final Boss: You are not worthy of Paradise!"
+};
+
+let currentDialogue = null;
 
 /* ============================================
    SECTION 4: PARALLAX STARFIELD
@@ -231,12 +254,13 @@ loadAchievements();
    SECTION 7: BUTTON HANDLERS
    ============================================ */
 btnPause.onclick = () => {
-  if (["title", "paradise", "story", "cutscene"].includes(gameState)) return;
+  if (["title", "paradise", "story", "cutscene", "dialogue"].includes(gameState)) return;
   isPaused = !isPaused;
   btnPause.textContent = isPaused ? "Resume" : "Pause";
 };
 
 btnRestart.onclick = () => {
+  endlessMode = false;
   startGame(true);
 };
 
@@ -295,18 +319,21 @@ touchMove.addEventListener("touchmove", e => {
   const dy = pos.y - touchMoveCenter.y;
   touchMoveOffset = { x: dx, y: dy };
 
-  if (["play", "boss"].includes(gameState)) {
-    player.angle = Math.atan2(dy, dx) + Math.PI / 2;
-    const strength = Math.min(Math.hypot(dx, dy) / 40, 1);
-    const thrust = 200 * strength;
-    player.vx += Math.cos(player.angle - Math.PI / 2) * thrust * 0.016;
-    player.vy += Math.sin(player.angle - Math.PI / 2) * thrust * 0.016;
+  const len = Math.hypot(dx, dy);
+  if (len > 10) {
+    moveInput.x = dx / len;
+    moveInput.y = dy / len;
+  } else {
+    moveInput.x = 0;
+    moveInput.y = 0;
   }
 }, { passive: false });
 
 touchMove.addEventListener("touchend", () => {
   touchMoveActive = false;
   touchMoveOffset = { x: 0, y: 0 };
+  moveInput.x = 0;
+  moveInput.y = 0;
 });
 
 touchFire.addEventListener("touchstart", e => {
@@ -318,6 +345,8 @@ touchFire.addEventListener("touchstart", e => {
     advanceStory();
   } else if (gameState === "cutscene") {
     skipCutscene();
+  } else if (gameState === "dialogue") {
+    endDialogueAndSpawnBoss();
   } else {
     tryShoot();
   }
@@ -335,23 +364,30 @@ window.addEventListener("keydown", e => {
     advanceStory();
   } else if (gameState === "cutscene" && (e.code === "Space" || e.code === "Enter")) {
     skipCutscene();
+  } else if (gameState === "dialogue" && (e.code === "Space" || e.code === "Enter")) {
+    endDialogueAndSpawnBoss();
   }
 });
 window.addEventListener("keyup", e => keys[e.code] = false);
 
 function handleKeyboard(dt) {
   if (controlMode !== "keyboard") return;
-  if (!["play", "boss"].includes(gameState)) return;
+  if (!["play", "boss", "endless"].includes(gameState)) return;
 
-  const rotSpeed = 3;
-  const thrust = 250;
+  moveInput.x = 0;
+  moveInput.y = 0;
 
-  if (keys["ArrowLeft"] || keys["KeyA"]) player.angle -= rotSpeed * dt;
-  if (keys["ArrowRight"] || keys["KeyD"]) player.angle += rotSpeed * dt;
-  if (keys["ArrowUp"] || keys["KeyW"]) {
-    player.vx += Math.cos(player.angle - Math.PI / 2) * thrust * dt;
-    player.vy += Math.sin(player.angle - Math.PI / 2) * thrust * dt;
+  if (keys["ArrowLeft"] || keys["KeyA"]) moveInput.x -= 1;
+  if (keys["ArrowRight"] || keys["KeyD"]) moveInput.x += 1;
+  if (keys["ArrowUp"] || keys["KeyW"]) moveInput.y -= 1;
+  if (keys["ArrowDown"] || keys["KeyS"]) moveInput.y += 1;
+
+  const len = Math.hypot(moveInput.x, moveInput.y);
+  if (len > 0) {
+    moveInput.x /= len;
+    moveInput.y /= len;
   }
+
   if (keys["Space"]) {
     tryShoot();
   }
@@ -371,7 +407,7 @@ window.addEventListener("gamepaddisconnected", () => {
 
 function handleGamepad(dt) {
   if (controlMode !== "gamepad") return;
-  if (!["play", "boss"].includes(gameState)) return;
+  if (!["play", "boss", "endless"].includes(gameState)) return;
   if (gamepadIndex === null) return;
 
   const gp = navigator.getGamepads()[gamepadIndex];
@@ -379,12 +415,14 @@ function handleGamepad(dt) {
 
   const axisX = gp.axes[0] || 0;
   const axisY = gp.axes[1] || 0;
-  const thrust = 250;
 
-  if (Math.hypot(axisX, axisY) > 0.2) {
-    player.angle = Math.atan2(axisY, axisX) + Math.PI / 2;
-    player.vx += axisX * thrust * dt;
-    player.vy += axisY * thrust * dt;
+  moveInput.x = Math.abs(axisX) > 0.2 ? axisX : 0;
+  moveInput.y = Math.abs(axisY) > 0.2 ? axisY : 0;
+
+  const len = Math.hypot(moveInput.x, moveInput.y);
+  if (len > 1) {
+    moveInput.x /= len;
+    moveInput.y /= len;
   }
 
   if (gp.buttons[0].pressed) {
@@ -400,6 +438,7 @@ function startGame(fromTitle) {
   if (fromTitle) {
     currentLevel = 1;
     currentStoryIndex = 0;
+    endlessMode = false;
     gameState = "story";
   } else {
     gameState = "play";
@@ -427,6 +466,7 @@ function resetGame() {
   powerups = [];
   bosses = [null, null, null, null, null];
   currentBossIndex = -1;
+  miniBoss = null;
 
   score = 0;
   lives = 3;
@@ -435,6 +475,13 @@ function resetGame() {
   bulletCooldownBase = 0.2;
   warpTime = 0;
   landingTime = 0;
+  killsThisLevel = 0;
+  miniBossSpawned = false;
+  moveInput.x = 0;
+  moveInput.y = 0;
+  shakeTime = 0;
+  shakeIntensity = 0;
+
   isPaused = false;
   btnPause.textContent = "Pause";
   initStars();
@@ -464,12 +511,27 @@ function skipCutscene() {
   currentCutscene = null;
 }
 
+/* dialogue before boss */
+function startBossDialogue(level) {
+  currentDialogue = {
+    level,
+    text: bossDialogues[level] || "An unknown threat approaches..."
+  };
+  gameState = "dialogue";
+}
+function endDialogueAndSpawnBoss() {
+  if (!currentDialogue) return;
+  const level = currentDialogue.level;
+  currentDialogue = null;
+  spawnBossForLevel(level);
+}
+
 /* ============================================
    SECTION 11: SHOOTING, ENEMIES, BOSSES, POWERUPS
    ============================================ */
 function tryShoot() {
   if (!player.alive) return;
-  if (!["play", "boss"].includes(gameState)) return;
+  if (!["play", "boss", "endless"].includes(gameState)) return;
   if (bulletCooldown > 0) return;
 
   const speed = 400;
@@ -485,9 +547,9 @@ function tryShoot() {
   }
 
   for (const offset of patterns) {
-    const angle = player.angle + offset;
-    const dx = Math.cos(angle - Math.PI / 2);
-    const dy = Math.sin(angle - Math.PI / 2);
+    const angle = -Math.PI / 2 + offset; // always shoot up
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
     bullets.push({
       x: player.x + dx * 24,
       y: player.y + dy * 24,
@@ -521,6 +583,22 @@ function spawnEnemy() {
   });
 }
 
+function spawnMiniBoss(level) {
+  const w = canvas.width / window.devicePixelRatio;
+  const hpBase = 20 + level * 10;
+  miniBoss = {
+    level,
+    x: w / 2,
+    y: 80,
+    vx: 60 + level * 10,
+    radius: 40,
+    hp: hpBase,
+    maxHp: hpBase,
+    fireCooldown: 0.8,
+    img: IMAGES["boss" + Math.max(1, level - 1)]
+  };
+}
+
 function spawnPowerup(x, y) {
   const types = ["shield", "score", "rapid", "weapon"];
   const type = types[Math.floor(Math.random() * types.length)];
@@ -551,7 +629,7 @@ function applyPowerup(p) {
 function spawnBossForLevel(level) {
   const w = canvas.width / window.devicePixelRatio;
   const imgKey = "boss" + level;
-  const hpBase = 60 + (level - 1) * 20;
+  const hpBase = 80 + (level - 1) * 30;
   const radius = 60 + (level - 1) * 5;
 
   const boss = {
@@ -564,26 +642,107 @@ function spawnBossForLevel(level) {
     maxHp: hpBase,
     fireCooldown: 0,
     fireRate: 1.2 - level * 0.1,
-    img: IMAGES[imgKey]
+    img: IMAGES[imgKey],
+    patternTime: 0
   };
   bosses[level - 1] = boss;
   currentBossIndex = level - 1;
   gameState = "boss";
 }
 
-function bossFire(boss) {
-  const speed = 220 + boss.level * 30;
-  const patternCount = 6 + boss.level * 2;
-  for (let i = 0; i < patternCount; i++) {
-    const angle = (Math.PI * 2 * i) / patternCount;
-    const dx = Math.cos(angle);
-    const dy = Math.sin(angle);
+function bossFirePattern(boss, dt) {
+  boss.patternTime += dt;
+  const speedBase = 220 + boss.level * 30;
+
+  // unique patterns per level
+  if (boss.level === 1) {
+    // aimed shots at player
+    const angle = Math.atan2(player.y - boss.y, player.x - boss.x);
+    const speed = speedBase;
     bossBullets.push({
       x: boss.x,
       y: boss.y,
-      vx: dx * speed,
-      vy: dy * speed,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
       radius: 6
+    });
+  } else if (boss.level === 2) {
+    // horizontal wave
+    const count = 8;
+    for (let i = 0; i < count; i++) {
+      const offsetX = -80 + (160 / (count - 1)) * i;
+      bossBullets.push({
+        x: boss.x + offsetX,
+        y: boss.y,
+        vx: 0,
+        vy: speedBase,
+        radius: 6
+      });
+    }
+  } else if (boss.level === 3) {
+    // spiral
+    const angle = boss.patternTime * 4;
+    const speed = speedBase;
+    bossBullets.push({
+      x: boss.x,
+      y: boss.y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      radius: 6
+    });
+  } else if (boss.level === 4) {
+    // rotating ring
+    const count = 12;
+    const baseAngle = boss.patternTime * 2;
+    for (let i = 0; i < count; i++) {
+      const angle = baseAngle + (Math.PI * 2 * i) / count;
+      bossBullets.push({
+        x: boss.x,
+        y: boss.y,
+        vx: Math.cos(angle) * speedBase,
+        vy: Math.sin(angle) * speedBase,
+        radius: 6
+      });
+    }
+  } else if (boss.level === 5) {
+    // mixed: ring + aimed
+    const count = 10;
+    const baseAngle = boss.patternTime * 3;
+    for (let i = 0; i < count; i++) {
+      const angle = baseAngle + (Math.PI * 2 * i) / count;
+      bossBullets.push({
+        x: boss.x,
+        y: boss.y,
+        vx: Math.cos(angle) * (speedBase * 0.8),
+        vy: Math.sin(angle) * (speedBase * 0.8),
+        radius: 6
+      });
+    }
+    const angleAimed = Math.atan2(player.y - boss.y, player.x - boss.x);
+    bossBullets.push({
+      x: boss.x,
+      y: boss.y,
+      vx: Math.cos(angleAimed) * (speedBase * 1.2),
+      vy: Math.sin(angleAimed) * (speedBase * 1.2),
+      radius: 7
+    });
+  }
+
+  sounds.bossLaser.currentTime = 0;
+  sounds.bossLaser.play();
+}
+
+function miniBossFire(mini) {
+  const speed = 200 + mini.level * 20;
+  const count = 6;
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count;
+    bossBullets.push({
+      x: mini.x,
+      y: mini.y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      radius: 5
     });
   }
   sounds.bossLaser.currentTime = 0;
@@ -594,7 +753,7 @@ function bossFire(boss) {
    SECTION 12: UPDATE LOGIC (LEVELS, BOSSES, WARP, LANDING)
    ============================================ */
 function update(dt) {
-  if (["play", "boss"].includes(gameState)) {
+  if (["play", "boss", "endless"].includes(gameState)) {
     updatePlay(dt);
   } else if (gameState === "warp") {
     updateWarp(dt);
@@ -603,6 +762,8 @@ function update(dt) {
   } else if (gameState === "cutscene") {
     updateCutscene(dt);
   } else if (gameState === "story") {
+    updateStars(dt, 1);
+  } else if (gameState === "dialogue") {
     updateStars(dt, 1);
   }
 }
@@ -617,16 +778,15 @@ function updatePlay(dt) {
   const w = canvas.width / window.devicePixelRatio;
   const h = canvas.height / window.devicePixelRatio;
 
-  player.x += player.vx * dt;
-  player.y += player.vy * dt;
-  const friction = 0.98;
-  player.vx *= friction;
-  player.vy *= friction;
+  // steady movement
+  const speed = 260;
+  player.x += moveInput.x * speed * dt;
+  player.y += moveInput.y * speed * dt;
 
-  if (player.x < -30) player.x = w + 30;
-  if (player.x > w + 30) player.x = -30;
-  if (player.y < -30) player.y = h + 30;
-  if (player.y > h + 30) player.y = -30;
+  // clamp to screen
+  const margin = 20;
+  player.x = Math.max(margin, Math.min(w - margin, player.x));
+  player.y = Math.max(margin, Math.min(h - margin, player.y));
 
   bulletCooldown = Math.max(0, bulletCooldown - dt);
   bullets = bullets.filter(b => {
@@ -637,11 +797,12 @@ function updatePlay(dt) {
 
   const cfg = levelConfigs.find(l => l.id === currentLevel) || levelConfigs[0];
 
-  if (gameState === "play") {
+  if (gameState === "play" || gameState === "endless") {
     enemySpawnTimer -= dt;
+    const spawnRate = endlessMode ? 0.7 : (cfg.spawnRate || 1.2);
     if (enemySpawnTimer <= 0) {
       spawnEnemy();
-      enemySpawnTimer = cfg.spawnRate || 1.2;
+      enemySpawnTimer = spawnRate;
     }
   }
 
@@ -655,6 +816,7 @@ function updatePlay(dt) {
     return p.y < h + 60;
   });
 
+  // enemy vs bullets
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
     for (let j = bullets.length - 1; j >= 0; j--) {
@@ -667,13 +829,27 @@ function updatePlay(dt) {
           enemies.splice(i, 1);
           addExplosion(e.x, e.y);
           score += 100;
+          killsThisLevel++;
           if (Math.random() < 0.25) spawnPowerup(e.x, e.y);
+
+          // mini-boss at 5 kills
+          if (!miniBossSpawned && killsThisLevel >= 5 && !miniBoss && !endlessMode) {
+            miniBossSpawned = true;
+            spawnMiniBoss(currentLevel);
+          }
+
+          // boss at 10 kills
+          if (!endlessMode && killsThisLevel >= 10 && currentBossIndex < currentLevel - 1 && !bosses[currentLevel - 1]) {
+            enemies = [];
+            startBossDialogue(currentLevel);
+          }
         }
         break;
       }
     }
   }
 
+  // powerups vs player
   for (let i = powerups.length - 1; i >= 0; i--) {
     const p = powerups[i];
     if (circleHit(p.x, p.y, p.radius, player.x, player.y, player.radius)) {
@@ -682,11 +858,13 @@ function updatePlay(dt) {
     }
   }
 
+  // enemies vs player
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
     if (circleHit(e.x, e.y, e.radius, player.x, player.y, player.radius)) {
       enemies.splice(i, 1);
       addExplosion(player.x, player.y);
+      triggerShake(0.4, 8);
       if (player.shield > 0) {
         player.shield -= 1;
       } else {
@@ -700,21 +878,24 @@ function updatePlay(dt) {
     }
   }
 
-  if (gameState === "play" && score >= cfg.scoreToBoss && currentBossIndex < currentLevel - 1) {
-    enemies = [];
-    spawnBossForLevel(currentLevel);
+  // mini-boss update
+  if (miniBoss) {
+    updateMiniBoss(dt, miniBoss);
   }
 
+  // main boss update
   if (gameState === "boss" && currentBossIndex >= 0) {
     updateBoss(dt, bosses[currentBossIndex]);
   }
 
+  // boss bullets
   bossBullets = bossBullets.filter(bb => {
     bb.x += bb.vx * dt;
     bb.y += bb.vy * dt;
     const inside = bb.x > -40 && bb.x < w + 40 && bb.y > -40 && bb.y < h + 40;
     if (inside && circleHit(bb.x, bb.y, bb.radius, player.x, player.y, player.radius)) {
       addExplosion(player.x, player.y);
+      triggerShake(0.4, 8);
       if (player.shield > 0) {
         player.shield -= 1;
       } else {
@@ -731,6 +912,53 @@ function updatePlay(dt) {
   });
 
   updateStars(dt, 1);
+  updateShake(dt);
+}
+
+function updateMiniBoss(dt, mini) {
+  const w = canvas.width / window.devicePixelRatio;
+
+  mini.x += mini.vx * dt;
+  if (mini.x < 60 || mini.x > w - 60) mini.vx *= -1;
+
+  mini.fireCooldown -= dt;
+  if (mini.fireCooldown <= 0) {
+    miniBossFire(mini);
+    mini.fireCooldown = 1.2;
+  }
+
+  // bullets vs mini-boss
+  for (let j = bullets.length - 1; j >= 0; j--) {
+    const b = bullets[j];
+    if (circleHit(mini.x, mini.y, mini.radius, b.x, b.y, b.radius)) {
+      bullets.splice(j, 1);
+      mini.hp -= 1;
+      addExplosion(b.x, b.y);
+      score += 15;
+      if (mini.hp <= 0) {
+        addExplosion(mini.x, mini.y);
+        triggerShake(0.5, 10);
+        miniBoss = null;
+      }
+      break;
+    }
+  }
+
+  // mini-boss vs player
+  if (circleHit(mini.x, mini.y, mini.radius, player.x, player.y, player.radius)) {
+    addExplosion(player.x, player.y);
+    triggerShake(0.5, 10);
+    if (player.shield > 0) {
+      player.shield -= 1;
+    } else {
+      lives -= 1;
+      if (lives <= 0) {
+        player.alive = false;
+        gameState = "gameover";
+        handleHighScore();
+      }
+    }
+  }
 }
 
 function updateBoss(dt, boss) {
@@ -741,7 +969,7 @@ function updateBoss(dt, boss) {
 
   boss.fireCooldown -= dt;
   if (boss.fireCooldown <= 0) {
-    bossFire(boss);
+    bossFirePattern(boss, dt);
     boss.fireCooldown = Math.max(0.4, boss.fireRate);
   }
 
@@ -751,18 +979,29 @@ function updateBoss(dt, boss) {
       bullets.splice(j, 1);
       boss.hp -= 1;
       addExplosion(b.x, b.y);
+      triggerShake(0.3, 6);
       score += 20;
       if (boss.hp <= 0) {
-        addExplosion(boss.x, b.y);
+        addExplosion(boss.x, boss.y);
+        triggerShake(0.7, 12);
         const idx = boss.level - 1;
         bosses[idx] = null;
         currentBossIndex = -1;
         unlockAchievement("bossSlayer" + boss.level, "Boss Slayer " + boss.level);
-        currentLevel++;
-        if (currentLevel <= 5) {
-          startCutscene("afterBoss" + boss.level);
+
+        if (!endlessMode) {
+          currentLevel++;
+          killsThisLevel = 0;
+          miniBossSpawned = false;
+          miniBoss = null;
+
+          if (currentLevel <= 5) {
+            startCutscene("afterBoss" + boss.level);
+          } else {
+            startCutscene("afterBoss5");
+          }
         } else {
-          startCutscene("afterBoss5");
+          // endless: just keep going, maybe increase difficulty
         }
       }
       break;
@@ -771,6 +1010,7 @@ function updateBoss(dt, boss) {
 
   if (circleHit(boss.x, boss.y, boss.radius, player.x, player.y, player.radius)) {
     addExplosion(player.x, player.y);
+    triggerShake(0.7, 12);
     if (player.shield > 0) {
       player.shield -= 1;
     } else {
@@ -812,7 +1052,7 @@ function updateCutscene(dt) {
 }
 
 /* ============================================
-   SECTION 13: COLLISION, EXPLOSIONS, HIGH SCORE
+   SECTION 13: COLLISION, EXPLOSIONS, SHAKE, HIGH SCORE
    ============================================ */
 function circleHit(x1, y1, r1, x2, y2, r2) {
   const dx = x1 - x2;
@@ -840,19 +1080,41 @@ function handleHighScore() {
   }
 }
 
+function triggerShake(time, intensity) {
+  shakeTime = Math.max(shakeTime, time);
+  shakeIntensity = Math.max(shakeIntensity, intensity);
+}
+
+function updateShake(dt) {
+  if (shakeTime > 0) {
+    shakeTime -= dt;
+    if (shakeTime <= 0) {
+      shakeTime = 0;
+      shakeIntensity = 0;
+    }
+  }
+}
+
 /* ============================================
    SECTION 14: DRAWING (NEON EFFECTS, HUD, SCENES)
    ============================================ */
+function applyCameraShake() {
+  if (shakeTime > 0 && shakeIntensity > 0) {
+    const dx = (Math.random() - 0.5) * shakeIntensity;
+    const dy = (Math.random() - 0.5) * shakeIntensity;
+    ctx.translate(dx, dy);
+  }
+}
+
 function drawPlayer() {
   if (!player.alive) return;
   if (!IMAGES.player.complete) return;
 
   ctx.save();
   ctx.translate(player.x, player.y);
-  ctx.rotate(player.angle);
 
   ctx.globalCompositeOperation = "lighter";
-  ctx.shadowBlur = 20;
+  ctx.shadowBlur = 25;
   ctx.shadowColor = "#00ffff";
   ctx.drawImage(IMAGES.player, -32, -32, 64, 64);
 
@@ -910,10 +1172,9 @@ function drawBossSprite(boss) {
   if (!boss || !boss.img || !boss.img.complete) return;
   ctx.save();
   ctx.translate(boss.x, boss.y);
-  // assume boss PNG faces DOWN, rotate 180 to face up
-  ctx.rotate(Math.PI);
+  ctx.rotate(Math.PI); // assume PNG faces down
   ctx.globalCompositeOperation = "lighter";
-  ctx.shadowBlur = 25;
+  ctx.shadowBlur = 30;
   ctx.shadowColor = "#ff0044";
   const size = boss.radius * 2;
   ctx.drawImage(boss.img, -size / 2, -size / 2, size, size);
@@ -928,6 +1189,20 @@ function drawBossSprite(boss) {
   ctx.fillStyle = "#ff0044";
   ctx.fillRect(w / 2 - 120, 20, 240 * ratio, 12);
   ctx.restore();
+}
+
+function drawMiniBossSprite(mini) {
+  if (!mini || !mini.img || !mini.img.complete) return;
+  ctx.save();
+  ctx.translate(mini.x, mini.y);
+  ctx.rotate(Math.PI);
+  ctx.globalCompositeOperation = "lighter";
+  ctx.shadowBlur = 20;
+  ctx.shadowColor = "#ff8800";
+  const size = mini.radius * 2;
+  ctx.drawImage(mini.img, -size / 2, -size / 2, size, size);
+  ctx.restore();
+  ctx.globalCompositeOperation = "source-over";
 }
 
 function drawBullets() {
@@ -1027,7 +1302,8 @@ function drawHUD() {
   ctx.fillText(`Lives: ${lives}`, 16, 64);
   ctx.fillText(`Shield: ${player.shield}`, 16, 84);
   ctx.fillText(`Weapon: ${player.weaponLevel}`, 16, 104);
-  ctx.fillText(`Level: ${currentLevel}`, 16, 124);
+  ctx.fillText(`Level: ${endlessMode ? "Endless" : currentLevel}`, 16, 124);
+  ctx.fillText(`Kills: ${killsThisLevel}/10`, 16, 144);
 
   if (gameState === "gameover") {
     ctx.font = "24px system-ui";
@@ -1067,6 +1343,7 @@ function drawAchievementPopups() {
 
 function drawStars(multiplier = 1) {
   ctx.save();
+  ctx.globalCompositeOperation = "screen";
   for (const s of stars) {
     const alpha = 0.3 + 0.7 * s.z;
     ctx.fillStyle = `rgba(255,255,255,${alpha})`;
@@ -1074,6 +1351,7 @@ function drawStars(multiplier = 1) {
     ctx.fillRect(s.x, s.y, 1, len * multiplier);
   }
   ctx.restore();
+  ctx.globalCompositeOperation = "source-over";
 }
 
 function drawBackground() {
@@ -1127,6 +1405,28 @@ function drawStoryScreen() {
   ctx.font = "14px system-ui";
   ctx.shadowColor = "#ff00ff";
   ctx.fillText("Tap Fire / Press Space to continue", w / 2, h / 2 + 40);
+  ctx.restore();
+}
+
+function drawDialogue() {
+  const w = canvas.width / window.devicePixelRatio;
+  const h = canvas.height / window.devicePixelRatio;
+
+  drawBackground();
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.shadowBlur = 20;
+  ctx.shadowColor = "#ff00ff";
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "18px system-ui";
+
+  const text = currentDialogue ? currentDialogue.text : "";
+  ctx.fillText(text, w / 2, h / 2);
+
+  ctx.font = "14px system-ui";
+  ctx.shadowColor = "#00ffff";
+  ctx.fillText("Tap Fire / Press Space to confront the boss", w / 2, h / 2 + 40);
   ctx.restore();
 }
 
@@ -1241,7 +1541,7 @@ function drawParadise() {
 
   ctx.font = "16px system-ui";
   ctx.fillText("You beat the game!", w / 2, h / 2 + 190);
-  ctx.fillText("Press Restart to play again", w / 2, h / 2 + 220);
+  ctx.fillText("Press Restart for Endless Mode", w / 2, h / 2 + 220);
   ctx.restore();
 }
 
@@ -1306,17 +1606,23 @@ function gameLoop(t) {
     update(dt);
   }
 
+  ctx.save();
+  applyCameraShake();
+
   if (gameState === "title") {
     updateStars(dt, 1);
     drawTitleScreen();
   } else if (gameState === "story") {
     drawStoryScreen();
+  } else if (gameState === "dialogue") {
+    drawDialogue();
   } else if (gameState === "cutscene") {
     drawCutscene();
-  } else if (["play", "boss", "gameover"].includes(gameState)) {
+  } else if (["play", "boss", "endless", "gameover"].includes(gameState)) {
     drawBackground();
     drawPlayer();
     drawEnemies();
+    if (miniBoss) drawMiniBossSprite(miniBoss);
     if (gameState === "boss" && currentBossIndex >= 0) {
       drawBossSprite(bosses[currentBossIndex]);
     }
@@ -1332,6 +1638,8 @@ function gameLoop(t) {
   } else if (gameState === "paradise") {
     drawParadise();
   }
+
+  ctx.restore();
 
   if (controlMode === "touch") {
     drawJoystickOverlay();
